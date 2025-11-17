@@ -80,7 +80,7 @@ module.exports = {
 		}
 
 		const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-		
+
 		// 버튼은 최대 5개씩 한 행에 배치 (Discord 제한)
 		const buttonRows = [];
 		for (let i = 0; i < choices.length; i += 5) {
@@ -110,23 +110,23 @@ module.exports = {
 			.setDescription(
 				`${isAnonymous ? '무기명' : '기명'} 투표입니다. 아래 버튼을 눌러 투표하세요.\n` +
 				`${allowMultiple ? '✅ 중복 투표 허용' : '❌ 중복 투표 불가'}\n` +
-				`⏰ ${endTimeText}`
+				`⏰ ${endTimeText}`,
 			)
 			.addFields(
 				choices.map((choice, index) => ({
 					name: `${emojis[index]} ${choice}`,
 					value: '0표',
 					inline: false,
-				}))
+				})),
 			)
 			.setFooter({ text: `투표 생성자: ${interaction.user.username}` })
 			.setTimestamp();
 
-		const reply = await interaction.reply({ embeds: [embed], components: buttonRows });
+		await interaction.reply({ embeds: [embed], components: buttonRows });
 		// messageId를 안정적으로 가져오기
 		const fetchedReply = await interaction.fetchReply();
 		const messageId = fetchedReply.id;
-		
+
 		console.log(`투표 생성: messageId=${messageId}, title=${title}, choices=${choices.length}`);
 
 		// 투표 데이터 초기화
@@ -154,10 +154,10 @@ module.exports = {
 					// 최신 투표 데이터 가져오기 (클라이언트에서 직접 가져오기)
 					const vote = savedClient.voteData?.get(messageId);
 					console.log(`타이머 실행: messageId=${messageId}, vote 존재=${!!vote}, vote.ended=${vote?.ended}`);
-					
+
 					if (vote && !vote.ended) {
 						console.log(`투표 자동 종료 시작: ${messageId}`);
-						console.log(`타이머 시점의 투표 데이터:`, {
+						console.log('타이머 시점의 투표 데이터:', {
 							choices: vote.choices?.length || 0,
 							votersMapSize: vote.voters?.size || 0,
 							voterCounts: vote.voters ? Array.from(vote.voters.entries()).map(([idx, voters]) => ({
@@ -166,12 +166,12 @@ module.exports = {
 								voterIds: Array.from(voters),
 							})) : [],
 						});
-						
+
 						// vote 객체의 참조 확인
 						const voteFromMap = savedClient.voteData.get(messageId);
 						console.log(`vote 객체 참조 동일: ${vote === voteFromMap}`);
-						console.log(`vote.voters 참조:`, vote.voters);
-						
+						console.log('vote.voters 참조:', vote.voters);
+
 						await endVote(savedClient, messageId, vote, savedChannelId);
 						console.log(`투표 자동 종료 완료: ${messageId}`);
 					}
@@ -191,7 +191,7 @@ module.exports = {
 async function endVote(client, messageId, vote, channelId = null) {
 	console.log(`endVote 호출: messageId=${messageId}, channelId=${channelId}`);
 	console.log(`vote 상태: choices=${vote.choices?.length || 0}, voters.size=${vote.voters?.size || 0}, ended=${vote.ended}`);
-	
+
 	// voters Map의 내용 확인
 	if (vote.voters) {
 		const voterCounts = Array.from(vote.voters.entries()).map(([idx, voters]) => ({
@@ -199,24 +199,24 @@ async function endVote(client, messageId, vote, channelId = null) {
 			count: voters.size,
 			voterIds: Array.from(voters),
 		}));
-		console.log(`투표자 데이터:`, voterCounts);
+		console.log('투표자 데이터:', voterCounts);
 	}
-	
+
 	if (vote.ended) {
 		console.log('이미 종료된 투표입니다.');
 		return;
 	}
-	
+
 	vote.ended = true;
-	
+
 	try {
 		// channelId가 없으면 vote 객체에서 가져오기
 		const targetChannelId = channelId || vote.channelId;
-		
+
 		if (!targetChannelId) {
 			throw new Error('채널 ID를 찾을 수 없습니다.');
 		}
-		
+
 		let channel;
 		try {
 			channel = await client.channels.fetch(targetChannelId);
@@ -225,11 +225,11 @@ async function endVote(client, messageId, vote, channelId = null) {
 			console.error('채널 접근 실패:', error);
 			throw new Error('채널에 접근할 수 없습니다. 채널이 삭제되었거나 권한이 없습니다.');
 		}
-		
+
 		if (!channel) {
 			throw new Error('채널을 찾을 수 없습니다.');
 		}
-		
+
 		let message;
 		try {
 			message = await channel.messages.fetch(messageId);
@@ -245,7 +245,7 @@ async function endVote(client, messageId, vote, channelId = null) {
 				message = null;
 			}
 		}
-		
+
 		// 원본 임베드에서 제목 추출
 		let voteTitle = '투표';
 		if (message && message.embeds[0]) {
@@ -256,9 +256,9 @@ async function endVote(client, messageId, vote, channelId = null) {
 			// 메시지를 찾을 수 없으면 기본 제목 사용
 			voteTitle = '투표';
 		}
-		
+
 		const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-		
+
 		// choices가 없으면 원본 메시지나 저장된 데이터에서 추출
 		let choices = vote.choices;
 		if (!choices || choices.length === 0) {
@@ -276,7 +276,7 @@ async function endVote(client, messageId, vote, channelId = null) {
 				choices = [];
 			}
 		}
-		
+
 		// choices가 여전히 없으면 결과를 전송할 수 없음
 		if (!choices || choices.length === 0) {
 			console.error('선택지가 없어 결과를 생성할 수 없습니다. vote 객체:', JSON.stringify({
@@ -293,7 +293,7 @@ async function endVote(client, messageId, vote, channelId = null) {
 					.setTitle('🏁 투표 종료')
 					.setDescription(`총 ${totalVotes}표가 집계되었습니다.\n\n⚠️ 선택지 정보를 불러올 수 없어 상세 결과를 표시할 수 없습니다.`)
 					.setTimestamp();
-				
+
 				if (message) {
 					try {
 						await message.delete();
@@ -302,7 +302,7 @@ async function endVote(client, messageId, vote, channelId = null) {
 						// 삭제 실패 무시
 					}
 				}
-				
+
 				try {
 					await channel.send({ embeds: [errorEmbed] });
 				}
@@ -312,17 +312,17 @@ async function endVote(client, messageId, vote, channelId = null) {
 			}
 			return;
 		}
-		
+
 		// 결과 계산
 		console.log(`결과 계산 시작: choices.length=${choices.length}, vote.voters.size=${vote.voters?.size || 0}`);
-		
+
 		const results = choices.map((choice, index) => {
 			const voters = vote.voters?.get(index) || new Set();
 			const voteCount = voters.size;
 			const voterIds = Array.from(voters);
-			
+
 			console.log(`선택지 ${index} (${choice}): ${voteCount}표, 투표자 수: ${voterIds.length}`);
-			
+
 			return {
 				choice,
 				index,
@@ -330,11 +330,11 @@ async function endVote(client, messageId, vote, channelId = null) {
 				voterIds,
 			};
 		}).sort((a, b) => b.voteCount - a.voteCount);
-		
+
 		console.log(`결과 계산 완료: 총 ${results.length}개 선택지, 총 투표 수: ${results.reduce((sum, r) => sum + r.voteCount, 0)}`);
 
 		const totalVotes = results.reduce((sum, r) => sum + r.voteCount, 0);
-		
+
 		// 결과 임베드 생성
 		const resultEmbed = new EmbedBuilder()
 			.setColor(vote.isAnonymous ? 0x00FF00 : 0x0099FF)
@@ -345,8 +345,9 @@ async function endVote(client, messageId, vote, channelId = null) {
 		// 결과 필드 추가
 		for (const result of results) {
 			let value = `**${result.voteCount}표**`;
-			
+
 			if (!vote.isAnonymous && result.voterIds.length > 0) {
+				// 최대 20명 표시
 				const voterNames = result.voterIds
 					.map(id => {
 						if (message && message.guild) {
@@ -355,14 +356,14 @@ async function endVote(client, messageId, vote, channelId = null) {
 						}
 						return `<@${id}>`;
 					})
-					.slice(0, 20); // 최대 20명 표시
-				
+					.slice(0, 20);
+
 				value += `\n\n**투표자:**\n${voterNames.join(', ')}`;
 				if (result.voterIds.length > 20) {
 					value += ` 외 ${result.voterIds.length - 20}명`;
 				}
 			}
-			
+
 			resultEmbed.addFields({
 				name: `${emojis[result.index]} ${result.choice}`,
 				value: value || '투표 없음',
@@ -403,10 +404,10 @@ async function endVote(client, messageId, vote, channelId = null) {
 			// 오류를 다시 throw하지 않고 로그만 남김
 		}
 	}
-		catch (error) {
-			console.error('투표 종료 처리 중 오류:', error);
-		}
+	catch (error) {
+		console.error('투표 종료 처리 중 오류:', error);
 	}
+}
 
 module.exports.endVote = endVote;
 
