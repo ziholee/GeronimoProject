@@ -67,7 +67,7 @@ module.exports = {
 		const isAnonymous = interaction.options.getBoolean('무기명') ?? false;
 		const allowMultiple = interaction.options.getBoolean('중복허용') ?? false;
 		const endTimeMinutes = interaction.options.getInteger('종료시간');
-		
+
 		const choices = [];
 		for (let i = 1; i <= 10; i++) {
 			const choice = interaction.options.getString(`선택지${i}`);
