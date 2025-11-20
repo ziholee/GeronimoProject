@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -12,7 +12,7 @@ module.exports = {
 				.setMaxLength(100)),
 	async execute(interaction) {
 		if (!interaction.member.voice.channel) {
-			await interaction.reply({ content: '음성 채널에 먼저 입장해주세요.', ephemeral: true });
+			await interaction.reply({ content: '음성 채널에 먼저 입장해주세요.', flags: MessageFlags.Ephemeral });
 			return;
 		}
 		
@@ -21,7 +21,7 @@ module.exports = {
 		
 		// 임시 채널인지 확인
 		if (!client.tempVoiceChannels?.has(voiceChannel.id)) {
-			await interaction.reply({ content: '이 명령어는 자동 생성된 임시 채널에서만 사용할 수 있습니다.', ephemeral: true });
+			await interaction.reply({ content: '이 명령어는 자동 생성된 임시 채널에서만 사용할 수 있습니다.', flags: MessageFlags.Ephemeral });
 			return;
 		}
 		
@@ -29,7 +29,7 @@ module.exports = {
 		
 		// 채널 소유자 확인
 		if (channelInfo.ownerId !== interaction.user.id) {
-			await interaction.reply({ content: '이 채널의 소유자만 이름을 변경할 수 있습니다.', ephemeral: true });
+			await interaction.reply({ content: '이 채널의 소유자만 이름을 변경할 수 있습니다.', flags: MessageFlags.Ephemeral });
 			return;
 		}
 		
@@ -37,11 +37,11 @@ module.exports = {
 		
 		try {
 			await voiceChannel.setName(newName);
-			await interaction.reply({ content: `채널 이름이 \`${newName}\`로 변경되었습니다.`, ephemeral: true });
+			await interaction.reply({ content: `채널 이름이 \`${newName}\`로 변경되었습니다.`, flags: MessageFlags.Ephemeral });
 		}
 		catch (error) {
 			console.error('채널 이름 변경 실패:', error);
-			await interaction.reply({ content: '채널 이름 변경 중 오류가 발생했습니다.', ephemeral: true });
+			await interaction.reply({ content: '채널 이름 변경 중 오류가 발생했습니다.', flags: MessageFlags.Ephemeral });
 		}
 	},
 };

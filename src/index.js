@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Client, Collection, GatewayIntentBits } = require('discord.js');
 const { token } = require('../config.json');
+const { loadVoiceMasterChannels } = require('./storage/voiceMasterStore');
 
 // 새로운 클라이언트 인스턴스를 생성합니다
 const client = new Client({
@@ -50,6 +51,9 @@ for (const file of eventFiles) {
 		client.on(event.name, (...args) => event.execute(...args));
 	}
 }
+
+// VoiceMaster 채널 정보 로드
+client.voiceMasterChannels = loadVoiceMasterChannels();
 
 // 클라이언트의 토큰으로 Discord에 로그인합니다
 client.login(token);

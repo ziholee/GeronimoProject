@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -75,7 +75,7 @@ module.exports = {
 		}
 
 		if (choices.length < 2) {
-			await interaction.reply({ content: '최소 2개 이상의 선택지가 필요합니다.', ephemeral: true });
+			await interaction.reply({ content: '최소 2개 이상의 선택지가 필요합니다.', flags: MessageFlags.Ephemeral });
 			return;
 		}
 
