@@ -1,11 +1,16 @@
 const { Events, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, PermissionFlagsBits } = require('discord.js');
 const { endVote } = require('../commands/utility/vote');
+const giveawayCommand = require('../commands/utility/giveway');
 
 module.exports = {
 	name: Events.InteractionCreate,
 	async execute(interaction) {
 		// 버튼 상호작용 처리
 		if (interaction.isButton()) {
+			if (await giveawayCommand.handleButtonInteraction?.(interaction)) {
+				return;
+			}
+
 			const customId = interaction.customId;
 			const messageId = interaction.message.id;
 			
@@ -180,6 +185,12 @@ module.exports = {
 					.setFields(fields);
 				
 				await interaction.update({ embeds: [updatedEmbed] });
+				return;
+			}
+		}
+
+		if (interaction.isModalSubmit()) {
+			if (await giveawayCommand.handleModalSubmit?.(interaction)) {
 				return;
 			}
 		}
