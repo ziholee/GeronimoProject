@@ -20,6 +20,12 @@ module.exports = {
 				{ name: '/채널인원제한', value: '현재 임시 음성 채널의 최대 인원을 설정합니다.', inline: false },
 				{ name: '/채널비공개', value: '현재 임시 음성 채널을 비공개로 설정합니다.', inline: false },
 				{ name: '/게이브어웨이', value: '지정한 시간 뒤 리액션 참가자 중 당첨자를 뽑습니다.', inline: false },
+				{ name: '/환영메시지 채널설정', value: '환영 메시지를 보낼 채널을 설정합니다. (관리자 전용)', inline: false },
+				{ name: '/환영메시지 배경설정', value: '환영 메시지 배경 이미지를 설정합니다. (관리자 전용)', inline: false },
+				{ name: '/환영메시지 메시지설정', value: '환영 메시지 텍스트를 설정합니다. (관리자 전용)', inline: false },
+				{ name: '/환영메시지 설정확인', value: '현재 환영 메시지 설정을 확인합니다. (관리자 전용)', inline: false },
+				{ name: '/환영메시지 배경목록', value: '사용 가능한 배경 이미지 목록을 확인합니다. (관리자 전용)', inline: false },
+				{ name: '/환영메시지 초기화', value: '환영 메시지 설정을 초기화합니다. (관리자 전용)', inline: false },
 			)
 			.setImage('https://cdn.discordapp.com/attachments/1328267471191902259/1328267474151907348/image.png?ex=67b76779&is=67b615f9&hm=78e281971b6002487042014330869338124c299180b1165018339d1a519a2952&')
 			.setFooter({ text: 'developed by master ziho_', iconURL: 'https://cdn.discordapp.com/attachments/1328267471191902259/1328267474151907348/image.png?ex=67b76779&is=67b615f9&hm=78e281971b6002487042014330869338124c299180b1165018339d1a519a2952&' })

@@ -195,6 +195,23 @@ module.exports = {
 			}
 		}
 
+		// Autocomplete 처리
+		if (interaction.isAutocomplete()) {
+			const command = interaction.client.commands.get(interaction.commandName);
+
+			if (!command) {
+				return;
+			}
+
+			try {
+				await command.autocomplete?.(interaction);
+			}
+			catch (error) {
+				console.error(`Autocomplete 처리 중 오류 발생: ${error}`);
+			}
+			return;
+		}
+
 		// 슬래시 명령어 처리
 		if (interaction.isChatInputCommand()) {
 			const command = interaction.client.commands.get(interaction.commandName);
