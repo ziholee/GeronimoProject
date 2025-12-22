@@ -5,6 +5,7 @@ const { Client, Collection, GatewayIntentBits } = require('discord.js');
 const { token } = require('../config.json');
 const { loadVoiceMasterChannels } = require('./storage/voiceMasterStore');
 const { loadWelcomeSettings } = require('./storage/welcomeStore');
+const { loadLevelData, loadLevelConfig } = require('./storage/levelStore');
 
 // 새로운 클라이언트 인스턴스를 생성합니다
 const client = new Client({
@@ -12,6 +13,8 @@ const client = new Client({
 		GatewayIntentBits.Guilds,
 		GatewayIntentBits.GuildVoiceStates,
 		GatewayIntentBits.GuildMembers,
+		GatewayIntentBits.GuildMessages,
+		GatewayIntentBits.MessageContent,
 	],
 });
 
@@ -59,6 +62,10 @@ client.voiceMasterChannels = loadVoiceMasterChannels();
 
 // 환영 메시지 설정 로드
 client.welcomeSettings = loadWelcomeSettings();
+
+// 레벨/XP 데이터 및 설정 로드
+client.levelData = loadLevelData();
+client.levelConfig = loadLevelConfig();
 
 // 클라이언트의 토큰으로 Discord에 로그인합니다
 client.login(token);

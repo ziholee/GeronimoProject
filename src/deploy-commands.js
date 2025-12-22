@@ -31,15 +31,15 @@ const rest = new REST().setToken(token);
 // 명령어 배포
 (async () => {
 	try {
-		console.log(`${commands.length}개의 슬래시 명령어를 등록하는 중...`);
+		console.log(`${commands.length}개의 슬래시 명령어를 (글로벌)로 등록하는 중...`);
 
-		// 글로벌 명령어로 등록
+		// 글로벌 명령어로 등록 (모든 서버에서 사용 가능, 전파 지연 가능성 있음)
 		const data = await rest.put(
 			Routes.applicationCommands(clientId),
 			{ body: commands },
 		);
 
-		console.log(`${data.length}개의 슬래시 명령어가 성공적으로 등록되었습니다.`);
+		console.log(`${data.length}개의 슬래시 명령어가 글로벌로 성공적으로 등록되었습니다.`);
 	}
 	catch (error) {
 		console.error(error);
