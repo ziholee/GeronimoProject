@@ -1,5 +1,5 @@
-const { Events, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, PermissionFlagsBits } = require('discord.js');
-const { endVote } = require('../commands/utility/vote');
+const { Events, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { endVote, updateVoteEmbed } = require('../commands/utility/vote');
 const giveawayCommand = require('../commands/utility/giveway');
 
 module.exports = {
@@ -13,12 +13,11 @@ module.exports = {
 
 			const customId = interaction.customId;
 			const messageId = interaction.message.id;
-			
+			interaction.client.voteData = interaction.client.voteData || new Map();
+			const vote = interaction.client.voteData.get(messageId);
+
 			// 종료 버튼 처리
-			if (customId.startsWith('end_vote_')) {
-				const creatorId = customId.split('_')[2];
-				const vote = interaction.client.voteData?.get(messageId);
-				
+			if (customId === 'end_vote') {
 				if (!vote) {
 					await interaction.reply({ content: '투표를 찾을 수 없습니다.', flags: MessageFlags.Ephemeral });
 					return;
@@ -29,8 +28,7 @@ module.exports = {
 					return;
 				}
 				
-				// 권한 확인: 생성자 또는 서버 관리자
-				const isCreator = interaction.user.id === creatorId || interaction.user.id === vote.creatorId;
+				const isCreator = interaction.user.id === vote.creatorId;
 				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
 				
 				if (!isCreator && !isAdmin) {
@@ -38,7 +36,7 @@ module.exports = {
 					return;
 				}
 				
-				const channelId = interaction.channel?.id || interaction.channelId || vote.channelId;
+				const channelId = interaction.channel?.id || vote.channelId;
 				if (!channelId) {
 					await interaction.reply({ content: '채널을 찾을 수 없습니다.', flags: MessageFlags.Ephemeral });
 					return;
@@ -48,149 +46,303 @@ module.exports = {
 				await interaction.reply({ content: '투표가 종료되었습니다.', flags: MessageFlags.Ephemeral });
 				return;
 			}
+
+			// 무기명/기명 토글
+			if (customId === 'vote_toggle_anonymous') {
+				if (!vote || vote.ended) {
+					await interaction.reply({ content: '투표를 찾을 수 없거나 이미 종료되었습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+				
+				const isCreator = interaction.user.id === vote.creatorId;
+				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
+				
+				if (!isCreator && !isAdmin) {
+					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 설정을 변경할 수 있습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+				
+				vote.isAnonymous = !vote.isAnonymous;
+				vote.guild = interaction.guild;
+				const { embed, buttonRows } = updateVoteEmbed(interaction.message.embeds[0], vote);
+				await interaction.update({ embeds: [embed], components: buttonRows });
+				return;
+			}
+
+			// 중복허용 토글
+			if (customId === 'vote_toggle_multiple') {
+				if (!vote || vote.ended) {
+					await interaction.reply({ content: '투표를 찾을 수 없거나 이미 종료되었습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+				
+				const isCreator = interaction.user.id === vote.creatorId;
+				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
+				
+				if (!isCreator && !isAdmin) {
+					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 설정을 변경할 수 있습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+				
+				vote.allowMultiple = !vote.allowMultiple;
+				vote.guild = interaction.guild;
+				const { embed, buttonRows } = updateVoteEmbed(interaction.message.embeds[0], vote);
+				await interaction.update({ embeds: [embed], components: buttonRows });
+				return;
+			}
+
+			// 종료시간 설정 모달
+			if (customId === 'vote_set_time') {
+				if (!vote || vote.ended) {
+					await interaction.reply({ content: '투표를 찾을 수 없거나 이미 종료되었습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				const isCreator = interaction.user.id === vote.creatorId;
+				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
+				
+				if (!isCreator && !isAdmin) {
+					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 설정을 변경할 수 있습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				const modal = new ModalBuilder()
+					.setCustomId(`vote_time_modal_${messageId}`)
+					.setTitle('종료 시간 설정');
+
+				const timeInput = new TextInputBuilder()
+					.setCustomId('end_time_minutes')
+					.setLabel('종료 시간 (분)')
+					.setStyle(TextInputStyle.Short)
+					.setPlaceholder('1-1440 사이의 숫자를 입력하세요')
+					.setRequired(true)
+					.setMaxLength(4);
+
+				modal.addComponents(new ActionRowBuilder().addComponents(timeInput));
+				await interaction.showModal(modal);
+				return;
+			}
+
+			// 선택지 추가 모달
+			if (customId === 'vote_add_choice') {
+				if (!vote || vote.ended) {
+					await interaction.reply({ content: '투표를 찾을 수 없거나 이미 종료되었습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				if (vote.choices.length >= 10) {
+					await interaction.reply({ content: '최대 10개까지만 선택지를 추가할 수 있습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				const isCreator = interaction.user.id === vote.creatorId;
+				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
+				
+				if (!isCreator && !isAdmin) {
+					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 선택지를 추가할 수 있습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				const modal = new ModalBuilder()
+					.setCustomId(`vote_add_choice_modal_${messageId}`)
+					.setTitle('선택지 추가');
+
+				const choiceInput = new TextInputBuilder()
+					.setCustomId('new_choice')
+					.setLabel('새로운 선택지')
+					.setStyle(TextInputStyle.Short)
+					.setPlaceholder('추가할 선택지를 입력하세요')
+					.setRequired(true)
+					.setMaxLength(100);
+
+				modal.addComponents(new ActionRowBuilder().addComponents(choiceInput));
+				await interaction.showModal(modal);
+				return;
+			}
 			
-			if (customId.startsWith('vote_')) {
+			// 투표 버튼 처리
+			if (customId.startsWith('vote_') && /^\d+$/.test(customId.split('_')[1])) {
 				const parts = customId.split('_');
 				const choiceIndex = parseInt(parts[1]);
-				const allowMultiple = parts[2] === '1';
-				const isAnonymous = parts[3] === '1';
-				const originalEmbed = interaction.message.embeds[0];
 				
-				// 투표 데이터 확인 - vote.js에서 이미 저장한 객체를 사용
-				interaction.client.voteData = interaction.client.voteData || new Map();
-				let currentVote = interaction.client.voteData.get(messageId);
-				
-				if (!currentVote) {
-					// vote.js에서 저장하지 않은 경우 (하위 호환성)
-					// 원본 임베드에서 선택지 추출
-					const choices = originalEmbed.fields.map(field => {
-						const match = field.name.match(/^[^\s]+\s(.+)$/);
-						return match ? match[1] : field.name;
-					});
-					
-					currentVote = {
-						choices,
-						voters: new Map(),
-						isAnonymous,
-						allowMultiple,
-						ended: false,
-					};
-					interaction.client.voteData.set(messageId, currentVote);
-					console.log(`[경고] 투표 데이터가 없어 새로 생성: ${messageId}, choices=${choices.length}`);
+				if (!vote) {
+					await interaction.reply({ content: '투표를 찾을 수 없습니다.', flags: MessageFlags.Ephemeral });
+					return;
 				}
-				else {
-					console.log(`투표 데이터 찾음: ${messageId}, choices=${currentVote.choices?.length || 0}, voters.size=${currentVote.voters?.size || 0}`);
-				}
-				
-				// voters Map이 없으면 초기화 (이미 있는 객체의 voters를 보존)
-				if (!currentVote.voters) {
-					console.log(`[경고] voters Map이 없어 초기화: ${messageId}`);
-					currentVote.voters = new Map();
-				}
-				
-				// 투표가 종료되었는지 확인
-				if (currentVote.ended) {
+
+				if (vote.ended) {
 					await interaction.reply({ content: '이미 종료된 투표입니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
+
+				if (choiceIndex >= vote.choices.length) {
+					await interaction.reply({ content: '유효하지 않은 선택지입니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
 				const userId = interaction.user.id;
+				vote.guild = interaction.guild;
+
+				if (!vote.voters) {
+					vote.voters = new Map();
+				}
 				
-				// 중복 투표 허용 여부에 따라 처리
-				if (!currentVote.allowMultiple) {
-					// 같은 선택지에 이미 투표한 경우
-					if (currentVote.voters.has(choiceIndex) && currentVote.voters.get(choiceIndex).has(userId)) {
-						// 이미 투표한 경우 투표 취소
-						currentVote.voters.get(choiceIndex).delete(userId);
-						if (currentVote.voters.get(choiceIndex).size === 0) {
-							currentVote.voters.delete(choiceIndex);
+				if (!vote.allowMultiple) {
+					if (vote.voters.has(choiceIndex) && vote.voters.get(choiceIndex).has(userId)) {
+						vote.voters.get(choiceIndex).delete(userId);
+						if (vote.voters.get(choiceIndex).size === 0) {
+							vote.voters.delete(choiceIndex);
 						}
 					}
 					else {
-						// 다른 선택지의 기존 투표 제거
-						for (const [index, voters] of currentVote.voters.entries()) {
+						for (const [index, voters] of vote.voters.entries()) {
 							if (index !== choiceIndex) {
 								voters.delete(userId);
 								if (voters.size === 0) {
-									currentVote.voters.delete(index);
+									vote.voters.delete(index);
 								}
 							}
 						}
 						
-						// 새 투표 추가
-						if (!currentVote.voters.has(choiceIndex)) {
-							currentVote.voters.set(choiceIndex, new Set());
+						if (!vote.voters.has(choiceIndex)) {
+							vote.voters.set(choiceIndex, new Set());
 						}
-						currentVote.voters.get(choiceIndex).add(userId);
+						vote.voters.get(choiceIndex).add(userId);
 					}
 				}
 				else {
-					// 중복 투표 허용
-					// 같은 선택지에 이미 투표한 경우 취소, 아니면 추가
-					if (currentVote.voters.has(choiceIndex) && currentVote.voters.get(choiceIndex).has(userId)) {
-						currentVote.voters.get(choiceIndex).delete(userId);
-						if (currentVote.voters.get(choiceIndex).size === 0) {
-							currentVote.voters.delete(choiceIndex);
+					if (vote.voters.has(choiceIndex) && vote.voters.get(choiceIndex).has(userId)) {
+						vote.voters.get(choiceIndex).delete(userId);
+						if (vote.voters.get(choiceIndex).size === 0) {
+							vote.voters.delete(choiceIndex);
 						}
 					}
 					else {
-						if (!currentVote.voters.has(choiceIndex)) {
-							currentVote.voters.set(choiceIndex, new Set());
+						if (!vote.voters.has(choiceIndex)) {
+							vote.voters.set(choiceIndex, new Set());
 						}
-						currentVote.voters.get(choiceIndex).add(userId);
+						vote.voters.get(choiceIndex).add(userId);
 					}
 				}
 				
-				// 투표 데이터 저장 확인 (디버깅)
-				console.log(`투표 버튼 클릭: messageId=${messageId}, choiceIndex=${choiceIndex}, 전체 voters.size=${currentVote.voters.size}`);
-				const voterCounts = Array.from(currentVote.voters.entries()).map(([idx, voters]) => ({
-					index: idx,
-					count: voters.size,
-					voterIds: Array.from(voters).slice(0, 5), // 최대 5명만 로그
-				}));
-				console.log(`투표 후 상태:`, voterCounts);
-				
-				// voteData에 저장된 객체가 currentVote와 같은지 확인
-				const storedVote = interaction.client.voteData.get(messageId);
-				console.log(`객체 참조 동일: ${currentVote === storedVote}, storedVote.voters.size=${storedVote?.voters?.size || 0}`);
-				
-				// Embed 업데이트
-				const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-				const fields = originalEmbed.fields.map((field, index) => {
-					const voteCount = currentVote.voters.get(index)?.size || 0;
-					const voters = currentVote.voters.get(index);
-					
-					let value = `${voteCount}표`;
-					if (!currentVote.isAnonymous && voters && voters.size > 0) {
-						const voterNames = Array.from(voters)
-							.map(id => {
-								const member = interaction.guild?.members.cache.get(id);
-								return member ? member.displayName : `<@${id}>`;
-							})
-							.slice(0, 10); // 최대 10명만 표시
-						
-						value += `\n투표자: ${voterNames.join(', ')}`;
-						if (voters.size > 10) {
-							value += ` 외 ${voters.size - 10}명`;
-						}
-					}
-					
-					return {
-						name: field.name,
-						value,
-						inline: false,
-					};
-				});
-				
-				const updatedEmbed = EmbedBuilder.from(originalEmbed)
-					.setFields(fields);
-				
-				await interaction.update({ embeds: [updatedEmbed] });
+				const { embed, buttonRows } = updateVoteEmbed(interaction.message.embeds[0], vote);
+				await interaction.update({ embeds: [embed], components: buttonRows });
 				return;
 			}
 		}
 
 		if (interaction.isModalSubmit()) {
 			if (await giveawayCommand.handleModalSubmit?.(interaction)) {
+				return;
+			}
+
+			const customId = interaction.customId;
+			interaction.client.voteData = interaction.client.voteData || new Map();
+
+			// 종료시간 설정 모달 처리
+			if (customId.startsWith('vote_time_modal_')) {
+				const messageId = customId.replace('vote_time_modal_', '');
+				const vote = interaction.client.voteData.get(messageId);
+
+				if (!vote || vote.ended) {
+					await interaction.reply({ content: '투표를 찾을 수 없거나 이미 종료되었습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				const isCreator = interaction.user.id === vote.creatorId;
+				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
+				
+				if (!isCreator && !isAdmin) {
+					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 설정을 변경할 수 있습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				const minutes = parseInt(interaction.fields.getTextInputValue('end_time_minutes'));
+				if (isNaN(minutes) || minutes < 1 || minutes > 1440) {
+					await interaction.reply({ content: '1-1440 사이의 숫자를 입력해주세요.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				vote.endTime = new Date(Date.now() + minutes * 60 * 1000);
+				vote.guild = interaction.guild;
+
+				// 기존 타이머가 있다면 취소할 수 없으므로, 새로운 타이머만 설정
+				setTimeout(async () => {
+					try {
+						const currentVote = interaction.client.voteData?.get(messageId);
+						if (currentVote && !currentVote.ended) {
+							await endVote(interaction.client, messageId, currentVote, currentVote.channelId);
+						}
+					}
+					catch (error) {
+						console.error('자동 종료 처리 중 오류:', error);
+					}
+				}, minutes * 60 * 1000);
+
+				await interaction.reply({ content: `종료 시간이 ${minutes}분으로 설정되었습니다.`, flags: MessageFlags.Ephemeral });
+				
+				// 메시지 업데이트
+				try {
+					const message = await interaction.channel.messages.fetch(messageId);
+					const originalEmbed = message.embeds[0];
+					const { embed, buttonRows } = updateVoteEmbed(originalEmbed, vote);
+					await message.edit({ embeds: [embed], components: buttonRows });
+				}
+				catch (error) {
+					console.error('메시지 업데이트 실패:', error);
+				}
+				return;
+			}
+
+			// 선택지 추가 모달 처리
+			if (customId.startsWith('vote_add_choice_modal_')) {
+				const messageId = customId.replace('vote_add_choice_modal_', '');
+				const vote = interaction.client.voteData.get(messageId);
+
+				if (!vote || vote.ended) {
+					await interaction.reply({ content: '투표를 찾을 수 없거나 이미 종료되었습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				const isCreator = interaction.user.id === vote.creatorId;
+				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
+				
+				if (!isCreator && !isAdmin) {
+					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 선택지를 추가할 수 있습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				if (vote.choices.length >= 10) {
+					await interaction.reply({ content: '최대 10개까지만 선택지를 추가할 수 있습니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				const newChoice = interaction.fields.getTextInputValue('new_choice').trim();
+				if (!newChoice || newChoice.length === 0) {
+					await interaction.reply({ content: '선택지를 입력해주세요.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				if (vote.choices.includes(newChoice)) {
+					await interaction.reply({ content: '이미 존재하는 선택지입니다.', flags: MessageFlags.Ephemeral });
+					return;
+				}
+
+				vote.choices.push(newChoice);
+				vote.guild = interaction.guild;
+
+				await interaction.reply({ content: `선택지 "${newChoice}"가 추가되었습니다.`, flags: MessageFlags.Ephemeral });
+				
+				// 메시지 업데이트
+				try {
+					const message = await interaction.channel.messages.fetch(messageId);
+					const originalEmbed = message.embeds[0];
+					const { embed, buttonRows } = updateVoteEmbed(originalEmbed, vote);
+					await message.edit({ embeds: [embed], components: buttonRows });
+				}
+				catch (error) {
+					console.error('메시지 업데이트 실패:', error);
+				}
 				return;
 			}
 		}

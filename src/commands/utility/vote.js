@@ -15,112 +15,25 @@ module.exports = {
 		.addStringOption(option =>
 			option.setName('선택지2')
 				.setDescription('두 번째 선택지')
-				.setRequired(true))
-		.addStringOption(option =>
-			option.setName('선택지3')
-				.setDescription('세 번째 선택지 (선택사항)')
-				.setRequired(false))
-		.addStringOption(option =>
-			option.setName('선택지4')
-				.setDescription('네 번째 선택지 (선택사항)')
-				.setRequired(false))
-		.addStringOption(option =>
-			option.setName('선택지5')
-				.setDescription('다섯 번째 선택지 (선택사항)')
-				.setRequired(false))
-		.addStringOption(option =>
-			option.setName('선택지6')
-				.setDescription('여섯 번째 선택지 (선택사항)')
-				.setRequired(false))
-		.addStringOption(option =>
-			option.setName('선택지7')
-				.setDescription('일곱 번째 선택지 (선택사항)')
-				.setRequired(false))
-		.addStringOption(option =>
-			option.setName('선택지8')
-				.setDescription('여덟 번째 선택지 (선택사항)')
-				.setRequired(false))
-		.addStringOption(option =>
-			option.setName('선택지9')
-				.setDescription('아홉 번째 선택지 (선택사항)')
-				.setRequired(false))
-		.addStringOption(option =>
-			option.setName('선택지10')
-				.setDescription('열 번째 선택지 (선택사항)')
-				.setRequired(false))
-		.addBooleanOption(option =>
-			option.setName('무기명')
-				.setDescription('무기명 투표 여부 (기본값: false)')
-				.setRequired(false))
-		.addBooleanOption(option =>
-			option.setName('중복허용')
-				.setDescription('중복 투표 허용 여부 (기본값: false)')
-				.setRequired(false))
-		.addIntegerOption(option =>
-			option.setName('종료시간')
-				.setDescription('투표 종료 시간 (분 단위, 선택사항)')
-				.setRequired(false)
-				.setMinValue(1)
-				.setMaxValue(1440)),
+				.setRequired(true)),
 	async execute(interaction) {
 		const title = interaction.options.getString('제목');
-		const isAnonymous = interaction.options.getBoolean('무기명') ?? false;
-		const allowMultiple = interaction.options.getBoolean('중복허용') ?? false;
-		const endTimeMinutes = interaction.options.getInteger('종료시간');
+		const isAnonymous = false;
+		const allowMultiple = false;
+		const endTimeMinutes = null;
 
-		const choices = [];
-		for (let i = 1; i <= 10; i++) {
-			const choice = interaction.options.getString(`선택지${i}`);
-			if (choice) choices.push(choice);
-		}
+		const choices = [
+			interaction.options.getString('선택지1'),
+			interaction.options.getString('선택지2'),
+		].filter(Boolean);
 
 		if (choices.length < 2) {
 			await interaction.reply({ content: '최소 2개 이상의 선택지가 필요합니다.', flags: MessageFlags.Ephemeral });
 			return;
 		}
 
-		const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-
-		// 버튼은 최대 5개씩 한 행에 배치 (Discord 제한)
-		const buttonRows = [];
-		for (let i = 0; i < choices.length; i += 5) {
-			const buttons = choices.slice(i, i + 5).map((choice, index) =>
-				new ButtonBuilder()
-					.setCustomId(`vote_${i + index}_${allowMultiple ? '1' : '0'}_${isAnonymous ? '1' : '0'}`)
-					.setLabel(choice.length > 80 ? choice.substring(0, 77) + '...' : choice)
-					.setStyle(ButtonStyle.Primary)
-					.setEmoji(emojis[i + index]));
-			buttonRows.push(new ActionRowBuilder().addComponents(buttons));
-		}
-
-		// 종료 버튼 추가
-		const endButton = new ButtonBuilder()
-			.setCustomId(`end_vote_${interaction.user.id}`)
-			.setLabel('투표 종료')
-			.setStyle(ButtonStyle.Danger)
-			.setEmoji('⏹️');
-		buttonRows.push(new ActionRowBuilder().addComponents(endButton));
-
 		const endTime = endTimeMinutes ? new Date(Date.now() + endTimeMinutes * 60 * 1000) : null;
-		const endTimeText = endTime ? `<t:${Math.floor(endTime.getTime() / 1000)}:R> 종료` : '수동 종료';
-
-		const embed = new EmbedBuilder()
-			.setColor(isAnonymous ? 0x00FF00 : 0x0099FF)
-			.setTitle(isAnonymous ? `🔒 ${title}` : `📊 ${title}`)
-			.setDescription(
-				`${isAnonymous ? '무기명' : '기명'} 투표입니다. 아래 버튼을 눌러 투표하세요.\n` +
-				`${allowMultiple ? '✅ 중복 투표 허용' : '❌ 중복 투표 불가'}\n` +
-				`⏰ ${endTimeText}`,
-			)
-			.addFields(
-				choices.map((choice, index) => ({
-					name: `${emojis[index]} ${choice}`,
-					value: '0표',
-					inline: false,
-				})),
-			)
-			.setFooter({ text: `투표 생성자: ${interaction.user.username}` })
-			.setTimestamp();
+		const { embed, buttonRows } = createVoteEmbed(title, choices, isAnonymous, allowMultiple, endTime, interaction.user.username);
 
 		await interaction.reply({ embeds: [embed], components: buttonRows });
 		// messageId를 안정적으로 가져오기
@@ -139,6 +52,7 @@ module.exports = {
 			creatorId: interaction.user.id,
 			messageId,
 			channelId: interaction.channel.id,
+			guild: interaction.guild,
 			ended: false,
 			endTime,
 		};
@@ -151,27 +65,11 @@ module.exports = {
 			const savedClient = interaction.client;
 			setTimeout(async () => {
 				try {
-					// 최신 투표 데이터 가져오기 (클라이언트에서 직접 가져오기)
 					const vote = savedClient.voteData?.get(messageId);
 					console.log(`타이머 실행: messageId=${messageId}, vote 존재=${!!vote}, vote.ended=${vote?.ended}`);
 
 					if (vote && !vote.ended) {
 						console.log(`투표 자동 종료 시작: ${messageId}`);
-						console.log('타이머 시점의 투표 데이터:', {
-							choices: vote.choices?.length || 0,
-							votersMapSize: vote.voters?.size || 0,
-							voterCounts: vote.voters ? Array.from(vote.voters.entries()).map(([idx, voters]) => ({
-								index: idx,
-								count: voters.size,
-								voterIds: Array.from(voters),
-							})) : [],
-						});
-
-						// vote 객체의 참조 확인
-						const voteFromMap = savedClient.voteData.get(messageId);
-						console.log(`vote 객체 참조 동일: ${vote === voteFromMap}`);
-						console.log('vote.voters 참조:', vote.voters);
-
 						await endVote(savedClient, messageId, vote, savedChannelId);
 						console.log(`투표 자동 종료 완료: ${messageId}`);
 					}
@@ -409,5 +307,166 @@ async function endVote(client, messageId, vote, channelId = null) {
 	}
 }
 
+function createVoteEmbed(title, choices, isAnonymous, allowMultiple, endTime, creatorName) {
+	const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+	const endTimeText = endTime ? `<t:${Math.floor(endTime.getTime() / 1000)}:R> 종료` : '수동 종료';
+
+	const embed = new EmbedBuilder()
+		.setColor(isAnonymous ? 0x00FF00 : 0x0099FF)
+		.setTitle(isAnonymous ? `🔒 ${title}` : `📊 ${title}`)
+		.setDescription(
+			`${isAnonymous ? '무기명' : '기명'} 투표입니다. 아래 버튼을 눌러 투표하세요.\n` +
+			`${allowMultiple ? '✅ 중복 투표 허용' : '❌ 중복 투표 불가'}\n` +
+			`⏰ ${endTimeText}`,
+		)
+		.addFields(
+			choices.map((choice, index) => ({
+				name: `${emojis[index]} ${choice}`,
+				value: '0표',
+				inline: false,
+			})),
+		)
+		.setFooter({ text: `투표 생성자: ${creatorName}` })
+		.setTimestamp();
+
+	const buttonRows = [];
+	for (let i = 0; i < choices.length; i += 5) {
+		const buttons = choices.slice(i, i + 5).map((choice, index) =>
+			new ButtonBuilder()
+				.setCustomId(`vote_${i + index}`)
+				.setLabel(choice.length > 80 ? choice.substring(0, 77) + '...' : choice)
+				.setStyle(ButtonStyle.Primary)
+				.setEmoji(emojis[i + index]));
+		buttonRows.push(new ActionRowBuilder().addComponents(buttons));
+	}
+
+	const settingsRow = new ActionRowBuilder()
+		.addComponents(
+			new ButtonBuilder()
+				.setCustomId('vote_toggle_anonymous')
+				.setLabel(isAnonymous ? '무기명' : '기명')
+				.setStyle(isAnonymous ? ButtonStyle.Success : ButtonStyle.Primary)
+				.setEmoji(isAnonymous ? '🔒' : '📊'),
+			new ButtonBuilder()
+				.setCustomId('vote_toggle_multiple')
+				.setLabel(allowMultiple ? '중복허용' : '중복불가')
+				.setStyle(allowMultiple ? ButtonStyle.Success : ButtonStyle.Secondary)
+				.setEmoji(allowMultiple ? '✅' : '❌'),
+			new ButtonBuilder()
+				.setCustomId('vote_set_time')
+				.setLabel('종료시간')
+				.setStyle(ButtonStyle.Secondary)
+				.setEmoji('⏰'),
+			new ButtonBuilder()
+				.setCustomId('vote_add_choice')
+				.setLabel('선택지 추가')
+				.setStyle(ButtonStyle.Secondary)
+				.setEmoji('➕')
+				.setDisabled(choices.length >= 10),
+		);
+	buttonRows.push(settingsRow);
+
+	const endButton = new ButtonBuilder()
+		.setCustomId('end_vote')
+		.setLabel('투표 종료')
+		.setStyle(ButtonStyle.Danger)
+		.setEmoji('⏹️');
+	buttonRows.push(new ActionRowBuilder().addComponents(endButton));
+
+	return { embed, buttonRows };
+}
+
+function updateVoteEmbed(originalEmbed, vote) {
+	const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+	const endTimeText = vote.endTime ? `<t:${Math.floor(vote.endTime.getTime() / 1000)}:R> 종료` : '수동 종료';
+
+	const title = originalEmbed.title?.replace(/^[^\s]+\s/, '') || '투표';
+	const embed = new EmbedBuilder()
+		.setColor(vote.isAnonymous ? 0x00FF00 : 0x0099FF)
+		.setTitle(vote.isAnonymous ? `🔒 ${title}` : `📊 ${title}`)
+		.setDescription(
+			`${vote.isAnonymous ? '무기명' : '기명'} 투표입니다. 아래 버튼을 눌러 투표하세요.\n` +
+			`${vote.allowMultiple ? '✅ 중복 투표 허용' : '❌ 중복 투표 불가'}\n` +
+			`⏰ ${endTimeText}`,
+		)
+		.setFooter(originalEmbed.footer)
+		.setTimestamp(originalEmbed.timestamp);
+
+	const fields = vote.choices.map((choice, index) => {
+		const voteCount = vote.voters?.get(index)?.size || 0;
+		const voters = vote.voters?.get(index);
+		
+		let value = `${voteCount}표`;
+		if (!vote.isAnonymous && voters && voters.size > 0) {
+			const voterNames = Array.from(voters)
+				.map(id => {
+					const member = vote.guild?.members.cache.get(id);
+					return member ? member.displayName : `<@${id}>`;
+				})
+				.slice(0, 10);
+			
+			value += `\n투표자: ${voterNames.join(', ')}`;
+			if (voters.size > 10) {
+				value += ` 외 ${voters.size - 10}명`;
+			}
+		}
+		
+		return {
+			name: `${emojis[index]} ${choice}`,
+			value,
+			inline: false,
+		};
+	});
+	embed.setFields(fields);
+
+	const buttonRows = [];
+	for (let i = 0; i < vote.choices.length; i += 5) {
+		const buttons = vote.choices.slice(i, i + 5).map((choice, index) =>
+			new ButtonBuilder()
+				.setCustomId(`vote_${i + index}`)
+				.setLabel(choice.length > 80 ? choice.substring(0, 77) + '...' : choice)
+				.setStyle(ButtonStyle.Primary)
+				.setEmoji(emojis[i + index]));
+		buttonRows.push(new ActionRowBuilder().addComponents(buttons));
+	}
+
+	const settingsRow = new ActionRowBuilder()
+		.addComponents(
+			new ButtonBuilder()
+				.setCustomId('vote_toggle_anonymous')
+				.setLabel(vote.isAnonymous ? '무기명' : '기명')
+				.setStyle(vote.isAnonymous ? ButtonStyle.Success : ButtonStyle.Primary)
+				.setEmoji(vote.isAnonymous ? '🔒' : '📊'),
+			new ButtonBuilder()
+				.setCustomId('vote_toggle_multiple')
+				.setLabel(vote.allowMultiple ? '중복허용' : '중복불가')
+				.setStyle(vote.allowMultiple ? ButtonStyle.Success : ButtonStyle.Secondary)
+				.setEmoji(vote.allowMultiple ? '✅' : '❌'),
+			new ButtonBuilder()
+				.setCustomId('vote_set_time')
+				.setLabel('종료시간')
+				.setStyle(ButtonStyle.Secondary)
+				.setEmoji('⏰'),
+			new ButtonBuilder()
+				.setCustomId('vote_add_choice')
+				.setLabel('선택지 추가')
+				.setStyle(ButtonStyle.Secondary)
+				.setEmoji('➕')
+				.setDisabled(vote.choices.length >= 10),
+		);
+	buttonRows.push(settingsRow);
+
+	const endButton = new ButtonBuilder()
+		.setCustomId('end_vote')
+		.setLabel('투표 종료')
+		.setStyle(ButtonStyle.Danger)
+		.setEmoji('⏹️');
+	buttonRows.push(new ActionRowBuilder().addComponents(endButton));
+
+	return { embed, buttonRows };
+}
+
+module.exports.createVoteEmbed = createVoteEmbed;
+module.exports.updateVoteEmbed = updateVoteEmbed;
 module.exports.endVote = endVote;
 
