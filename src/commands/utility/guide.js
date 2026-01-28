@@ -15,6 +15,8 @@ module.exports = {
 				{ name: '/핑', value: '봇 상태를 확인합니다.', inline: false },
 				{ name: '/밈', value: '랜덤 밈을 가져옵니다.', inline: false },
 				{ name: '/투표', value: '투표를 생성합니다.', inline: false },
+				{ name: '/웹훅포스트', value: '웹훅을 통해 트위터 스타일의 고급 알림을 전송합니다.', inline: false },
+				{ name: '/웹훅설정', value: '웹훅 URL을 설정하거나 확인합니다. (관리자 전용)', inline: false },
 				{ name: '/레벨', value: '자신 또는 다른 사용자의 레벨과 경험치를 확인합니다.', inline: false },
 				{ name: '/랭킹', value: '서버 내 레벨/XP 상위 유저 랭킹을 확인합니다.', inline: false },
 				{ name: '/레벨설정', value: '레벨 시스템의 쿨타임/알림 채널/알림 여부를 설정합니다. (관리자 전용)', inline: false },

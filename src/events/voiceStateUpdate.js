@@ -1,4 +1,5 @@
 const { Events, EmbedBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
+const { addLog } = require('../storage/logStore');
 
 module.exports = {
 	name: Events.VoiceStateUpdate,
@@ -11,6 +12,15 @@ module.exports = {
 		client.tempVoiceChannels = client.tempVoiceChannels || new Map();
 
 		// 사용자가 음성 채널에 입장한 경우
+		if (newState.channel && !oldState.channel && newState.member && !newState.member.user.bot) {
+			const guildId = newState.guild.id;
+			const userId = newState.member.user.id;
+			addLog(guildId, userId, 'VOICE_JOIN', {
+				channelId: newState.channel.id,
+				channelName: newState.channel.name,
+			});
+		}
+
 		if (newState.channel) {
 			const channelId = newState.channel.id;
 
@@ -101,6 +111,15 @@ module.exports = {
 		}
 
 		// 사용자가 음성 채널에서 나간 경우
+		if (oldState.channel && !newState.channel && oldState.member && !oldState.member.user.bot) {
+			const guildId = oldState.guild.id;
+			const userId = oldState.member.user.id;
+			addLog(guildId, userId, 'VOICE_LEAVE', {
+				channelId: oldState.channel.id,
+				channelName: oldState.channel.name,
+			});
+		}
+
 		if (oldState.channel) {
 			const channelId = oldState.channel.id;
 

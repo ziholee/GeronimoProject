@@ -3,12 +3,22 @@ const { createCanvas, loadImage, registerFont } = require('canvas');
 const path = require('path');
 const fs = require('fs');
 const { loadWelcomeSettings } = require('../storage/welcomeStore');
+const { addLog } = require('../storage/logStore');
 
 module.exports = {
 	name: Events.GuildMemberAdd,
 	async execute(member) {
 		const client = member.client;
 		const guild = member.guild;
+
+		const guildId = guild.id;
+		const userId = member.user.id;
+
+		addLog(guildId, userId, 'MEMBER_JOIN', {
+			username: member.user.username,
+			displayName: member.displayName,
+			roles: member.roles.cache.map(r => ({ id: r.id, name: r.name })),
+		});
 
 		client.welcomeSettings = client.welcomeSettings || loadWelcomeSettings();
 		const settings = client.welcomeSettings.get(guild.id);

@@ -5,6 +5,7 @@ const {
 	getRequiredXpForLevel,
 	loadLevelData,
 } = require('../storage/levelStore');
+const { addLog } = require('../storage/logStore');
 
 // 기본 설정 값
 const DEFAULT_COOLDOWN_MS = 60_000; // 60초
@@ -54,6 +55,14 @@ module.exports = {
 		const guildId = message.guild.id;
 		const userId = message.author.id;
 		const now = Date.now();
+
+		addLog(guildId, userId, 'MESSAGE_SEND', {
+			messageId: message.id,
+			channelId: message.channel.id,
+			channelName: message.channel.name,
+			content: content.substring(0, 500),
+			attachments: message.attachments.size > 0 ? message.attachments.map(a => a.url) : [],
+		});
 
 		// 설정 로드
 		const config = client.levelConfig.get(guildId) || {};

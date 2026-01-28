@@ -7,6 +7,8 @@ Discord.js v14를 기반으로 한 다기능 Discord 봇입니다. 레벨링 시
 - **레벨링 시스템**: 메시지 기반 XP 및 레벨 시스템
 - **음성 채널 관리**: 자동 생성되는 임시 음성 채널 관리 (Voice Master)
 - **환영 메시지**: 새 멤버 환영 메시지 자동 전송
+- **웹훅 포스트**: 트위터 스타일의 고급 알림 전송 기능
+- **사용자 로그 시스템**: 서버 사용자들의 모든 활동 로그 기록 및 관리 (관리자 전용)
 - **유틸리티 명령어**: 서버 정보, 사용자 정보, 밈 생성 등
 - **게임 명령어**: 다양한 게임 기능 제공
 
@@ -71,6 +73,8 @@ npm install
 - `data/levelConfig.json` - 레벨 설정 (자동 생성)
 - `data/voiceMasterChannels.json` - 음성 채널 설정 (자동 생성)
 - `data/welcomeSettings.json` - 환영 메시지 설정 (자동 생성)
+- `data/webhookSettings.json` - 웹훅 설정 (자동 생성)
+- `data/userLogs.json` - 사용자 활동 로그 데이터 (자동 생성)
 - `data/images/` - 이미지 저장 폴더 (필요시)
 
 ## 실행 방법
@@ -125,17 +129,25 @@ discord_bot/
 │   │   ├── ready.js       # 봇 준비 완료 이벤트
 │   │   ├── interactionCreate.js  # 슬래시 명령어 처리
 │   │   ├── messageCreate.js      # 메시지 이벤트 (레벨링 등)
+│   │   ├── messageUpdate.js      # 메시지 수정 이벤트 (로그 기록)
+│   │   ├── messageDelete.js      # 메시지 삭제 이벤트 (로그 기록)
 │   │   ├── guildMemberAdd.js     # 새 멤버 환영
+│   │   ├── guildMemberRemove.js  # 멤버 퇴장 이벤트 (로그 기록)
+│   │   ├── guildMemberUpdate.js  # 멤버 정보 변경 이벤트 (로그 기록)
 │   │   └── voiceStateUpdate.js   # 음성 채널 상태 변경
 │   └── storage/           # 데이터 저장소 모듈
 │       ├── levelStore.js  # 레벨 데이터 관리
 │       ├── voiceMasterStore.js  # 음성 채널 데이터 관리
-│       └── welcomeStore.js      # 환영 메시지 설정 관리
+│       ├── welcomeStore.js      # 환영 메시지 설정 관리
+│       ├── webhookStore.js      # 웹훅 설정 관리
+│       └── logStore.js          # 사용자 로그 데이터 관리
 └── data/                  # 데이터 저장 폴더
     ├── leveling.json      # 사용자 레벨/XP 데이터
     ├── levelConfig.json   # 레벨 시스템 설정
     ├── voiceMasterChannels.json  # 음성 채널 설정
     ├── welcomeSettings.json      # 환영 메시지 설정
+    ├── webhookSettings.json      # 웹훅 설정
+    ├── userLogs.json             # 사용자 활동 로그 데이터
     └── images/            # 이미지 파일 저장소
 ```
 
@@ -162,6 +174,33 @@ discord_bot/
 
 - 새 멤버가 서버에 입장하면 자동으로 환영 메시지 전송
 - `/welcome` 명령어로 환영 메시지 설정 관리
+
+### 웹훅 포스트
+
+- 트위터 스타일의 고급 Embed 알림 전송 기능
+- `/웹훅포스트` 명령어로 웹훅을 통해 메시지 전송
+- `/웹훅설정` 명령어로 채널별 웹훅 URL 저장 및 관리 (관리자 전용)
+- 이미지, 썸네일, 필드 등 다양한 옵션 지원
+- 채널에 웹훅 URL을 저장하면 매번 URL 입력 없이 사용 가능
+
+### 사용자 로그 시스템 (관리자 전용)
+
+- 서버 사용자들의 모든 활동을 자동으로 기록
+- **기록되는 활동**:
+  - 메시지 전송/수정/삭제
+  - 서버 입장/퇴장
+  - 닉네임 변경
+  - 역할 변경
+  - 음성 채널 입장/퇴장
+- `/로그조회` 명령어로 로그 조회:
+  - 특정 사용자의 로그 조회
+  - 서버 전체 로그 조회
+  - 타입별 필터링 지원
+  - 개수 제한 설정 가능
+- `/로그관리` 명령어로 로그 관리:
+  - 로그 통계 확인
+  - 사용자별/전체/타입별 로그 삭제
+  - JSON 파일로 로그 내보내기
 
 ## 문제 해결
 
