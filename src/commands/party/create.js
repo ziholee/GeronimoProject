@@ -39,16 +39,16 @@ module.exports = {
 		)
 		.addStringOption(option =>
 			option
+				.setName('집합시간')
+				.setDescription('형식: YYYY-MM-DD HH:mm 또는 MM-DD HH:mm')
+				.setRequired(true),
+		)
+		.addStringOption(option =>
+			option
 				.setName('설명')
 				.setDescription('파티 설명')
 				.setRequired(false)
 				.setMaxLength(500),
-		)
-		.addStringOption(option =>
-			option
-				.setName('집합시간')
-				.setDescription('형식: YYYY-MM-DD HH:mm 또는 MM-DD HH:mm')
-				.setRequired(true),
 		)
 		.addStringOption(option =>
 			option

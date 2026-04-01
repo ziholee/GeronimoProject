@@ -26,6 +26,9 @@
 - [x] Review final Git status and summarize the protection changes
 - [x] Add a safe sample config file for future setup
 - [x] Update README to document the sample-config workflow
+- [x] Inspect the deploy failure from report.md and identify the invalid slash-command definition
+- [x] Reorder slash-command options to satisfy Discord required-before-optional validation
+- [x] Verify all registered command definitions for option-order validity after the fix
 
 # Review
 
@@ -50,3 +53,6 @@
 - Removed already tracked local files from the Git index with `git rm --cached`, preserving working copies
 - Verified ignore coverage with `git check-ignore -v`
 - Added `config.example.json` and updated setup docs so future configuration uses a tracked template instead of sharing secrets
+- `report.md` captured a Discord command registration failure caused by a required option being declared after an optional option
+- Reordered `/파티생성` so required options (`제목`, `집합시간`) come before optional options, matching Discord API validation rules
+- Verified the full local command registry with a JSON inspection script; `party/create.js` was the only invalid definition and no option-order violations remain
