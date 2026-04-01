@@ -39,7 +39,13 @@ npm install
 
 ### 3. 설정 파일 생성
 
-프로젝트 루트 디렉토리에 `config.json` 파일을 생성하고 다음 내용을 입력합니다:
+프로젝트 루트 디렉토리에서 `config.example.json`을 복사해 `config.json` 파일을 만든 뒤 값을 채워 넣습니다:
+
+```bash
+cp config.example.json config.json
+```
+
+`config.json` 예시는 다음과 같습니다:
 
 ```json
 {
@@ -116,7 +122,8 @@ npm start
 
 ```
 discord_bot/
-├── config.json              # 봇 설정 파일 (토큰, ID 등)
+├── config.example.json      # 커밋 가능한 설정 예시 파일
+├── config.json              # 로컬 전용 봇 설정 파일 (Git 추적 제외)
 ├── package.json             # 프로젝트 의존성 및 스크립트
 ├── src/
 │   ├── index.js            # 메인 진입점, 봇 초기화 및 실행
@@ -227,7 +234,8 @@ discord_bot/
 ## 보안 주의사항
 
 - ⚠️ **절대 `config.json` 파일을 Git에 커밋하지 마세요!**
-- `.gitignore` 파일에 `config.json`을 추가하는 것을 권장합니다
+- 이 저장소는 `config.json`을 Git 추적에서 제외하도록 설정되어 있습니다.
+- 팀원과 설정 형식을 공유할 때는 `config.example.json`만 사용하세요.
 - 토큰이 노출되면 즉시 Discord Developer Portal에서 토큰을 재설정하세요
 
 ## 개발 정보
@@ -239,4 +247,3 @@ discord_bot/
 ## 라이선스
 
 ISC
-
