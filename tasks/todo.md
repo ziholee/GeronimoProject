@@ -1,5 +1,18 @@
 # TODO
 
+- [x] Find outdated command names and removed feature references in README
+- [x] Update README command documentation to match the current slash-command structure
+- [x] Verify README command references against the live command registry
+
+- [x] Inspect the current `/가이드` command and compare it with actually loaded slash commands
+- [x] Update `/가이드` to reflect current commands while fitting the existing project structure
+- [x] Verify the guide output shape and command coverage after the change
+
+- [x] Confirm all webhook-related code and documentation references in the project
+- [x] Remove webhook slash commands and webhook storage module
+- [x] Clean README mentions of webhook data files and storage modules
+- [x] Verify no project-owned `webhook` references remain after removal
+
 - [x] Review current `discord.js` structure against current v14 patterns and capture compatibility notes
 - [x] Read `docs/prd.md` and map the party scheduling MVP onto the existing project architecture
 - [x] Add persistent party scheduling storage/service/event/command files without removing existing features
@@ -15,6 +28,19 @@
 - [x] Update README to document the sample-config workflow
 
 # Review
+
+- README still referenced removed webhook features and older English-style command names such as `/level` and `/voice setup`
+- Updated README to describe the currently loaded Korean slash commands and current feature set only
+- Verified README command references against the live registry of 18 loaded slash commands and removed stale webhook references
+
+- `/가이드` was still hardcoding removed webhook commands and omitted newer command structure details
+- Updated the guide command to build sections from the live slash command registry instead of a stale manual list
+- Verified against the live command registry; the guide now reflects 18 currently loaded slash commands and summarizes subcommands or required options
+
+- Webhook feature references were limited to two utility slash commands, one JSON-backed storage module, and README documentation entries
+- Removed `/웹훅포스트`, `/웹훅설정`, and `src/storage/webhookStore.js`
+- Removed README mentions of `data/webhookSettings.json` and `webhookStore.js`
+- Verified with project search and command collection reload; remaining `webhook` mentions exist only in this task log
 
 - Current `discord.js` setup already follows the modern v14 pattern of file-based command/event loading plus a separate deploy script; reaction-based party recruitment requires additional reaction intent/partials support
 - Added `partyStore`, `partyService`, `schedulerService`, `dmService`, and `voiceChannelService` to implement the PRD MVP without removing existing commands or event flows
