@@ -1,12 +1,13 @@
 # Discord 봇 프로젝트
 
-Discord.js v14를 기반으로 한 다기능 Discord 봇입니다. 레벨링 시스템, 음성 채널 관리, 환영 메시지 등 다양한 기능을 제공합니다.
+Discord.js v14를 기반으로 한 다기능 Discord 봇입니다. 레벨링 시스템, 음성 채널 관리, 환영 메시지, 파티 예약 모집 등 다양한 기능을 제공합니다.
 
 ## 주요 기능
 
 - **레벨링 시스템**: 메시지 기반 XP 및 레벨 시스템
 - **음성 채널 관리**: 자동 생성되는 임시 음성 채널 관리 (Voice Master)
 - **환영 메시지**: 새 멤버 환영 메시지 자동 전송
+- **파티 예약 시스템**: 예약 시간에 맞춰 음성채널 생성 및 참가자 DM 초대
 - **웹훅 포스트**: 트위터 스타일의 고급 알림 전송 기능
 - **사용자 로그 시스템**: 서버 사용자들의 모든 활동 로그 기록 및 관리 (관리자 전용)
 - **유틸리티 명령어**: 서버 정보, 사용자 정보, 밈 생성 등
@@ -81,6 +82,7 @@ cp config.example.json config.json
 - `data/welcomeSettings.json` - 환영 메시지 설정 (자동 생성)
 - `data/webhookSettings.json` - 웹훅 설정 (자동 생성)
 - `data/userLogs.json` - 사용자 활동 로그 데이터 (자동 생성)
+- `data/parties.json` - 파티 예약 및 참여 데이터 (자동 생성)
 - `data/images/` - 이미지 저장 폴더 (필요시)
 
 ## 실행 방법
@@ -111,10 +113,12 @@ npm start
 4. Bot Permissions에서 필요한 권한 선택:
    - `Send Messages` (메시지 보내기)
    - `Manage Channels` (채널 관리)
+   - `Create Instant Invite` (초대 링크 만들기)
    - `Connect` (음성 채널 연결)
    - `Speak` (음성 채널에서 말하기)
    - `Attach Files` (파일 첨부)
    - `Embed Links` (링크 임베드)
+   - `Add Reactions` (반응 추가)
    - `Read Message History` (메시지 기록 읽기)
 5. 생성된 URL로 봇을 서버에 초대
 
@@ -129,12 +133,14 @@ discord_bot/
 │   ├── index.js            # 메인 진입점, 봇 초기화 및 실행
 │   ├── deploy-commands.js  # 슬래시 명령어 배포 스크립트
 │   ├── commands/           # 명령어 파일들
-│   │   ├── game/          # 게임 관련 명령어
+│   │   ├── party/         # 파티 예약 모집 명령어
 │   │   ├── utility/       # 유틸리티 명령어
 │   │   └── voice/         # 음성 채널 관련 명령어
 │   ├── events/            # 이벤트 핸들러
 │   │   ├── ready.js       # 봇 준비 완료 이벤트
 │   │   ├── interactionCreate.js  # 슬래시 명령어 처리
+│   │   ├── messageReactionAdd.js # 파티 참여 반응 처리
+│   │   ├── messageReactionRemove.js # 파티 참여 취소 처리
 │   │   ├── messageCreate.js      # 메시지 이벤트 (레벨링 등)
 │   │   ├── messageUpdate.js      # 메시지 수정 이벤트 (로그 기록)
 │   │   ├── messageDelete.js      # 메시지 삭제 이벤트 (로그 기록)
@@ -142,12 +148,18 @@ discord_bot/
 │   │   ├── guildMemberRemove.js  # 멤버 퇴장 이벤트 (로그 기록)
 │   │   ├── guildMemberUpdate.js  # 멤버 정보 변경 이벤트 (로그 기록)
 │   │   └── voiceStateUpdate.js   # 음성 채널 상태 변경
+│   ├── services/          # 기능 서비스 계층
+│   │   ├── partyService.js
+│   │   ├── schedulerService.js
+│   │   ├── dmService.js
+│   │   └── voiceChannelService.js
 │   └── storage/           # 데이터 저장소 모듈
 │       ├── levelStore.js  # 레벨 데이터 관리
 │       ├── voiceMasterStore.js  # 음성 채널 데이터 관리
 │       ├── welcomeStore.js      # 환영 메시지 설정 관리
 │       ├── webhookStore.js      # 웹훅 설정 관리
-│       └── logStore.js          # 사용자 로그 데이터 관리
+│       ├── logStore.js          # 사용자 로그 데이터 관리
+│       └── partyStore.js        # 파티 예약 데이터 관리
 └── data/                  # 데이터 저장 폴더
     ├── leveling.json      # 사용자 레벨/XP 데이터
     ├── levelConfig.json   # 레벨 시스템 설정
@@ -155,6 +167,7 @@ discord_bot/
     ├── welcomeSettings.json      # 환영 메시지 설정
     ├── webhookSettings.json      # 웹훅 설정
     ├── userLogs.json             # 사용자 활동 로그 데이터
+    ├── parties.json              # 파티 예약/참여 데이터
     └── images/            # 이미지 파일 저장소
 ```
 
@@ -181,6 +194,23 @@ discord_bot/
 
 - 새 멤버가 서버에 입장하면 자동으로 환영 메시지 전송
 - `/welcome` 명령어로 환영 메시지 설정 관리
+
+### 파티 예약 시스템
+
+- `/파티생성` 명령어로 파티 모집 임베드 생성
+- 생성자는 자동으로 참여자에 포함되며, 다른 멤버는 모집 메시지에 `✅` 반응으로 참여
+- 모집 마감 또는 최대 인원 초과 시 추가 참여 자동 제한
+- 예약 시간이 되면 봇이 음성채널을 생성하고 초대 링크를 만들어 참가자 전원에게 DM 전송
+- 생성된 파티 음성채널은 기존 임시 음성채널 정리 로직을 재사용해 비면 자동 삭제
+
+#### `/파티생성` 옵션
+
+- `제목` (필수)
+- `설명` (선택)
+- `집합시간` (필수, `YYYY-MM-DD HH:mm` 또는 `MM-DD HH:mm`)
+- `모집마감시간` (선택, 동일 형식)
+- `최대인원` (선택)
+- `채널이름` (선택)
 
 ### 웹훅 포스트
 
@@ -224,6 +254,7 @@ discord_bot/
 2. 봇이 서버에 초대되어 있는지 확인
 3. `clientId`가 올바른지 확인
 4. 봇에 `applications.commands` 스코프가 있는지 확인
+5. 새 기능이 추가됐다면 글로벌 명령어 전파에 수 분 이상 걸릴 수 있으니 잠시 기다린 뒤 다시 확인
 
 ### 레벨 데이터가 저장되지 않을 때
 
@@ -243,6 +274,7 @@ discord_bot/
 - **Discord.js 버전**: v14.24.2
 - **Node.js 권장 버전**: v18.x 또는 v20.x
 - **패키지 관리자**: npm
+- **파티 시스템 저장 방식**: `data/parties.json` 기반 영속화 + ready 시 스케줄러 복구
 
 ## 라이선스
 
