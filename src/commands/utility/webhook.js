@@ -6,13 +6,13 @@ module.exports = {
 		.setName('웹훅포스트')
 		.setDescription('웹훅을 통해 트위터 스타일의 고급 알림을 전송합니다.')
 		.addStringOption(option =>
-			option.setName('url')
-				.setDescription('웹훅 URL (설정된 웹훅이 있으면 생략 가능)')
-				.setRequired(false))
-		.addStringOption(option =>
 			option.setName('내용')
 				.setDescription('포스트 내용')
 				.setRequired(true))
+		.addStringOption(option =>
+			option.setName('url')
+				.setDescription('웹훅 URL (설정된 웹훅이 있으면 생략 가능)')
+				.setRequired(false))
 		.addStringOption(option =>
 			option.setName('제목')
 				.setDescription('포스트 제목 (선택사항)')

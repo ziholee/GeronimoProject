@@ -17,70 +17,65 @@ module.exports = {
 				.setDescription('두 번째 선택지')
 				.setRequired(true)),
 	async execute(interaction) {
-		const title = interaction.options.getString('제목');
-		const isAnonymous = false;
-		const allowMultiple = false;
-		const endTimeMinutes = null;
+		try {
+			const title = interaction.options.getString('제목');
+			const isAnonymous = false;
+			const allowMultiple = false;
+			const endTimeMinutes = null;
 
-		const choices = [
-			interaction.options.getString('선택지1'),
-			interaction.options.getString('선택지2'),
-		].filter(Boolean);
+			const choices = [
+				interaction.options.getString('선택지1'),
+				interaction.options.getString('선택지2'),
+			].filter(Boolean);
 
-		if (choices.length < 2) {
-			await interaction.reply({ content: '최소 2개 이상의 선택지가 필요합니다.', flags: MessageFlags.Ephemeral });
-			return;
+			if (choices.length < 2) {
+				await interaction.reply({ content: '최소 2개 이상의 선택지가 필요합니다.', flags: MessageFlags.Ephemeral });
+				return;
+			}
+
+			const endTime = endTimeMinutes ? new Date(Date.now() + endTimeMinutes * 60 * 1000) : null;
+			const { embed, buttonRows } = createVoteEmbed(title, choices, isAnonymous, allowMultiple, endTime, interaction.user.username);
+
+			await interaction.reply({ embeds: [embed], components: buttonRows });
+			const fetchedReply = await interaction.fetchReply();
+			const messageId = fetchedReply.id;
+
+			interaction.client.voteData = interaction.client.voteData || new Map();
+			const voteData = {
+				choices,
+				voters: new Map(),
+				isAnonymous,
+				allowMultiple,
+				creatorId: interaction.user.id,
+				messageId,
+				channelId: interaction.channel.id,
+				guild: interaction.guild,
+				ended: false,
+				endTime,
+			};
+			interaction.client.voteData.set(messageId, voteData);
+
+			if (endTimeMinutes) {
+				const savedChannelId = interaction.channel.id;
+				const savedClient = interaction.client;
+				setTimeout(async () => {
+					try {
+						const vote = savedClient.voteData?.get(messageId);
+						if (vote && !vote.ended) {
+							await endVote(savedClient, messageId, vote, savedChannelId);
+						}
+					}
+					catch (error) {
+						console.error('투표 자동 종료 처리 중 오류:', error);
+					}
+				}, endTimeMinutes * 60 * 1000);
+			}
 		}
-
-		const endTime = endTimeMinutes ? new Date(Date.now() + endTimeMinutes * 60 * 1000) : null;
-		const { embed, buttonRows } = createVoteEmbed(title, choices, isAnonymous, allowMultiple, endTime, interaction.user.username);
-
-		await interaction.reply({ embeds: [embed], components: buttonRows });
-		// messageId를 안정적으로 가져오기
-		const fetchedReply = await interaction.fetchReply();
-		const messageId = fetchedReply.id;
-
-		console.log(`투표 생성: messageId=${messageId}, title=${title}, choices=${choices.length}`);
-
-		// 투표 데이터 초기화
-		interaction.client.voteData = interaction.client.voteData || new Map();
-		const voteData = {
-			choices,
-			voters: new Map(),
-			isAnonymous,
-			allowMultiple,
-			creatorId: interaction.user.id,
-			messageId,
-			channelId: interaction.channel.id,
-			guild: interaction.guild,
-			ended: false,
-			endTime,
-		};
-		interaction.client.voteData.set(messageId, voteData);
-		console.log(`투표 데이터 저장 완료: messageId=${messageId}, voteData.voters=${voteData.voters instanceof Map ? 'Map' : 'undefined'}`);
-
-		// 종료 시간이 설정된 경우 타이머 설정
-		if (endTimeMinutes) {
-			const savedChannelId = interaction.channel.id;
-			const savedClient = interaction.client;
-			setTimeout(async () => {
-				try {
-					const vote = savedClient.voteData?.get(messageId);
-					console.log(`타이머 실행: messageId=${messageId}, vote 존재=${!!vote}, vote.ended=${vote?.ended}`);
-
-					if (vote && !vote.ended) {
-						console.log(`투표 자동 종료 시작: ${messageId}`);
-						await endVote(savedClient, messageId, vote, savedChannelId);
-						console.log(`투표 자동 종료 완료: ${messageId}`);
-					}
-					else {
-						console.log(`투표가 이미 종료되었거나 찾을 수 없음: ${messageId}, vote=${!!vote}, ended=${vote?.ended}`);
-					}
-				}
-				catch (error) {
-					console.error('자동 종료 처리 중 오류:', error);
-				}
-			}, endTimeMinutes * 60 * 1000);
+		catch (error) {
+			console.error('투표 생성 중 오류:', error);
+			if (!interaction.replied && !interaction.deferred) {
+				await interaction.reply({ content: '투표 생성 중 오류가 발생했습니다. 다시 시도해 주세요.', flags: MessageFlags.Ephemeral }).catch(() => {});
+			}
 		}
 	},
 };
@@ -380,7 +375,15 @@ function updateVoteEmbed(originalEmbed, vote) {
 	const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 	const endTimeText = vote.endTime ? `<t:${Math.floor(vote.endTime.getTime() / 1000)}:R> 종료` : '수동 종료';
 
-	const title = originalEmbed.title?.replace(/^[^\s]+\s/, '') || '투표';
+	const title = (originalEmbed?.title && typeof originalEmbed.title === 'string')
+		? originalEmbed.title.replace(/^[^\s]+\s/, '').replace(/^🔒\s/, '').replace(/^📊\s/, '')
+		: '투표';
+	const rawFooter = originalEmbed?.footer;
+	const footer = (rawFooter && typeof rawFooter === 'object' && rawFooter.text)
+		? { text: String(rawFooter.text), iconURL: rawFooter.iconURL }
+		: { text: '투표' };
+	const timestamp = originalEmbed?.timestamp != null ? originalEmbed.timestamp : Date.now();
+
 	const embed = new EmbedBuilder()
 		.setColor(vote.isAnonymous ? 0x00FF00 : 0x0099FF)
 		.setTitle(vote.isAnonymous ? `🔒 ${title}` : `📊 ${title}`)
@@ -389,8 +392,8 @@ function updateVoteEmbed(originalEmbed, vote) {
 			`${vote.allowMultiple ? '✅ 중복 투표 허용' : '❌ 중복 투표 불가'}\n` +
 			`⏰ ${endTimeText}`,
 		)
-		.setFooter(originalEmbed.footer)
-		.setTimestamp(originalEmbed.timestamp);
+		.setFooter(footer)
+		.setTimestamp(timestamp);
 
 	const fields = vote.choices.map((choice, index) => {
 		const voteCount = vote.voters?.get(index)?.size || 0;

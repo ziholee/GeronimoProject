@@ -165,67 +165,94 @@ module.exports = {
 				const parts = customId.split('_');
 				const choiceIndex = parseInt(parts[1]);
 				
-				if (!vote) {
+				let currentVote = vote;
+				// voteData가 없으면 임베드에서 복구 시도 (봇 재시작 등)
+				if (!currentVote && interaction.message.embeds?.[0]) {
+					const emb = interaction.message.embeds[0];
+					const choices = (emb.fields || []).map(f => {
+						const m = (f.name || '').match(/^[^\s]+\s+(.+)$/);
+						return m ? m[1] : f.name || '';
+					}).filter(Boolean);
+					if (choices.length >= 2) {
+						const isAnonymous = (emb.title || '').startsWith('🔒');
+						const allowMultiple = (emb.description || '').includes('중복 투표 허용');
+						currentVote = {
+							choices,
+							voters: new Map(),
+							isAnonymous,
+							allowMultiple,
+							creatorId: null,
+							messageId,
+							channelId: interaction.channel?.id,
+							guild: interaction.guild,
+							ended: false,
+							endTime: null,
+						};
+						interaction.client.voteData.set(messageId, currentVote);
+					}
+				}
+
+				if (!currentVote) {
 					await interaction.reply({ content: '투표를 찾을 수 없습니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
 
-				if (vote.ended) {
+				if (currentVote.ended) {
 					await interaction.reply({ content: '이미 종료된 투표입니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
 
-				if (choiceIndex >= vote.choices.length) {
+				if (choiceIndex >= currentVote.choices.length) {
 					await interaction.reply({ content: '유효하지 않은 선택지입니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
 
 				const userId = interaction.user.id;
-				vote.guild = interaction.guild;
+				currentVote.guild = interaction.guild;
 
-				if (!vote.voters) {
-					vote.voters = new Map();
+				if (!currentVote.voters) {
+					currentVote.voters = new Map();
 				}
 				
-				if (!vote.allowMultiple) {
-					if (vote.voters.has(choiceIndex) && vote.voters.get(choiceIndex).has(userId)) {
-						vote.voters.get(choiceIndex).delete(userId);
-						if (vote.voters.get(choiceIndex).size === 0) {
-							vote.voters.delete(choiceIndex);
+				if (!currentVote.allowMultiple) {
+					if (currentVote.voters.has(choiceIndex) && currentVote.voters.get(choiceIndex).has(userId)) {
+						currentVote.voters.get(choiceIndex).delete(userId);
+						if (currentVote.voters.get(choiceIndex).size === 0) {
+							currentVote.voters.delete(choiceIndex);
 						}
 					}
 					else {
-						for (const [index, voters] of vote.voters.entries()) {
+						for (const [index, voters] of currentVote.voters.entries()) {
 							if (index !== choiceIndex) {
 								voters.delete(userId);
 								if (voters.size === 0) {
-									vote.voters.delete(index);
+									currentVote.voters.delete(index);
 								}
 							}
 						}
 						
-						if (!vote.voters.has(choiceIndex)) {
-							vote.voters.set(choiceIndex, new Set());
+						if (!currentVote.voters.has(choiceIndex)) {
+							currentVote.voters.set(choiceIndex, new Set());
 						}
-						vote.voters.get(choiceIndex).add(userId);
+						currentVote.voters.get(choiceIndex).add(userId);
 					}
 				}
 				else {
-					if (vote.voters.has(choiceIndex) && vote.voters.get(choiceIndex).has(userId)) {
-						vote.voters.get(choiceIndex).delete(userId);
-						if (vote.voters.get(choiceIndex).size === 0) {
-							vote.voters.delete(choiceIndex);
+					if (currentVote.voters.has(choiceIndex) && currentVote.voters.get(choiceIndex).has(userId)) {
+						currentVote.voters.get(choiceIndex).delete(userId);
+						if (currentVote.voters.get(choiceIndex).size === 0) {
+							currentVote.voters.delete(choiceIndex);
 						}
 					}
 					else {
-						if (!vote.voters.has(choiceIndex)) {
-							vote.voters.set(choiceIndex, new Set());
+						if (!currentVote.voters.has(choiceIndex)) {
+							currentVote.voters.set(choiceIndex, new Set());
 						}
-						vote.voters.get(choiceIndex).add(userId);
+						currentVote.voters.get(choiceIndex).add(userId);
 					}
 				}
 				
-				const { embed, buttonRows } = updateVoteEmbed(interaction.message.embeds[0], vote);
+				const { embed, buttonRows } = updateVoteEmbed(interaction.message.embeds[0], currentVote);
 				await interaction.update({ embeds: [embed], components: buttonRows });
 				return;
 			}

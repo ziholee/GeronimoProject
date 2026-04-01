@@ -20,6 +20,8 @@ module.exports = {
 				{ name: '/레벨', value: '자신 또는 다른 사용자의 레벨과 경험치를 확인합니다.', inline: false },
 				{ name: '/랭킹', value: '서버 내 레벨/XP 상위 유저 랭킹을 확인합니다.', inline: false },
 				{ name: '/레벨설정', value: '레벨 시스템의 쿨타임/알림 채널/알림 여부를 설정합니다. (관리자 전용)', inline: false },
+				{ name: '/로그조회', value: '사용자 활동 로그를 조회합니다. 사용자별/전체 조회, 타입 필터링 지원. (관리자 전용)', inline: false },
+				{ name: '/로그관리', value: '로그를 관리합니다. 통계 확인, 삭제, JSON 파일로 내보내기. (관리자 전용)', inline: false },
 				{ name: '/음성채널설정', value: '음성 채널 자동 생성 기능을 설정합니다. (관리자 전용)', inline: false },
 				{ name: '/채널이름변경', value: '현재 임시 음성 채널의 이름을 변경합니다.', inline: false },
 				{ name: '/채널인원제한', value: '현재 임시 음성 채널의 최대 인원을 설정합니다.', inline: false },
