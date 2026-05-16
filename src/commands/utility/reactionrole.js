@@ -6,6 +6,7 @@ const {
 	MessageFlags,
 	ModalBuilder,
 	PermissionFlagsBits,
+	RoleSelectMenuBuilder,
 	SlashCommandBuilder,
 	StringSelectMenuBuilder,
 	TextInputBuilder,
@@ -24,30 +25,37 @@ const {
 const MODAL_PREFIX = 'reaction_role_create';
 const SERVER_EMOJI_SELECT_PREFIX = 'reaction_role_server_emoji';
 const COMMON_EMOJI_SELECT_PREFIX = 'reaction_role_common_emoji';
+const ADDITIONAL_ROLE_SELECT_PREFIX = 'reaction_role_additional_roles';
 const MANUAL_EMOJI_BUTTON_PREFIX = 'reaction_role_manual_emoji';
 const SETUP_TTL_MS = 15 * 60 * 1000;
+const MAX_REACTION_ROLE_COUNT = 10;
 
 const COMMON_EMOJI_OPTIONS = [
 	{ label: '확인', value: '✅', aliases: ['check', 'confirm', 'verified', 'verify', 'agree', 'yes', 'ok'] },
 	{ label: '공지', value: '📢', aliases: ['notice', 'announce', 'announcement', 'alarm', 'alert'] },
-	{ label: '해커톤', value: '🏆', aliases: ['hackathon', 'event', 'trophy', 'award'] },
+	{ label: '알림', value: '🔔', aliases: ['notification', 'notify', 'alarm', 'bell', 'alert'] },
+	{ label: '이벤트', value: '🎉', aliases: ['event', 'party', 'celebrate', 'celebration', 'festival'] },
+	{ label: '대회/수상', value: '🏆', aliases: ['contest', 'trophy', 'award', 'winner', 'hackathon'] },
 	{ label: '스터디', value: '📚', aliases: ['study', 'book', 'books', 'learn'] },
 	{ label: 'AI', value: '🤖', aliases: ['ai', 'bot', 'robot'] },
 	{ label: '프론트엔드', value: '💻', aliases: ['frontend', 'front', 'web', 'client'] },
 	{ label: '백엔드', value: '🛠️', aliases: ['backend', 'back', 'server', 'api'] },
 	{ label: '디자인', value: '🎨', aliases: ['design', 'art', 'paint', 'planning'] },
 	{ label: '게임', value: '🎮', aliases: ['game', 'gaming', 'play'] },
-	{ label: '빨강', value: '🔴', aliases: ['red'] },
-	{ label: '파랑', value: '🔵', aliases: ['blue'] },
-	{ label: '초록', value: '🟢', aliases: ['green'] },
-	{ label: '1번', value: '1️⃣', aliases: ['one', 'first', '1'] },
-	{ label: '2번', value: '2️⃣', aliases: ['two', 'second', '2'] },
-	{ label: '3번', value: '3️⃣', aliases: ['three', 'third', '3'] },
-	{ label: '4번', value: '4️⃣', aliases: ['four', 'fourth', '4'] },
+	{ label: '음악', value: '🎵', aliases: ['music', 'song', 'sound', 'audio'] },
+	{ label: '영화/애니', value: '🎬', aliases: ['movie', 'film', 'anime', 'watch'] },
+	{ label: '음성채팅', value: '🎙️', aliases: ['voice', 'mic', 'microphone', 'talk'] },
+	{ label: '채팅', value: '💬', aliases: ['chat', 'talk', 'message', 'community'] },
+	{ label: '하트', value: '❤️', aliases: ['heart', 'love', 'like'] },
+	{ label: '즐겨찾기', value: '⭐', aliases: ['star', 'favorite', 'fav'] },
+	{ label: '인기/핫', value: '🔥', aliases: ['hot', 'fire', 'popular', 'trend'] },
+	{ label: '웃음', value: '😂', aliases: ['fun', 'funny', 'laugh', 'meme'] },
+	{ label: '빨강', value: '🔴', aliases: ['red', 'ruby'] },
+	{ label: '파랑', value: '🔵', aliases: ['blue', 'sapphire'] },
+	{ label: '초록', value: '🟢', aliases: ['green', 'emerald'] },
 	{ label: '알림 해제', value: '🔕', aliases: ['mute', 'silent', 'unsubscribe', 'noalarm'] },
 	{ label: '취소/제거', value: '❌', aliases: ['cancel', 'remove', 'delete', 'no', 'x'] },
 	{ label: '차단/제외', value: '🚫', aliases: ['block', 'ban', 'deny', 'exclude'] },
-	{ label: '즐겨찾기', value: '⭐', aliases: ['star', 'favorite', 'fav'] },
 ];
 
 const MODE_ALIASES = new Map([
@@ -142,6 +150,27 @@ async function resolveRole(interaction, roleInput) {
 	return { role, botMember };
 }
 
+async function resolveRoles(interaction, roleInputs) {
+	const uniqueRoleInputs = [...new Set(roleInputs.filter(Boolean))].slice(0, MAX_REACTION_ROLE_COUNT);
+	if (uniqueRoleInputs.length === 0) {
+		return { error: '반응으로 부여하거나 제거할 역할을 1개 이상 선택해주세요.' };
+	}
+
+	const roles = [];
+	let botMember = null;
+	for (const roleInput of uniqueRoleInputs) {
+		const roleResult = await resolveRole(interaction, roleInput);
+		if (roleResult.error) {
+			return { error: roleResult.error };
+		}
+
+		botMember = roleResult.botMember;
+		roles.push(roleResult.role);
+	}
+
+	return { roles, botMember };
+}
+
 function parseModeInput(input, title) {
 	const rawValue = input.trim();
 	if (!rawValue) {
@@ -209,8 +238,46 @@ function buildCommonEmojiOptions(guild) {
 	});
 }
 
-function buildEmojiSetupComponents(interaction, setupId) {
+function getSetupRoleIds(setup) {
+	return [setup.roleId, ...(setup.additionalRoleIds || [])]
+		.filter(Boolean)
+		.filter((roleId, index, roleIds) => roleIds.indexOf(roleId) === index)
+		.slice(0, MAX_REACTION_ROLE_COUNT);
+}
+
+function formatSetupRoleMentions(setup) {
+	return getSetupRoleIds(setup).map(roleId => `<@&${roleId}>`).join(', ');
+}
+
+function buildSetupSummary(interaction, setup) {
+	const selectedRoleCount = getSetupRoleIds(setup).length;
+	return [
+		'반응 역할에 사용할 추가 역할과 이모지를 선택해주세요.',
+		`채널: <#${setup.channelId}>`,
+		`역할: ${formatSetupRoleMentions(setup)} (${selectedRoleCount}개)`,
+		`모드: ${setup.mode}${setup.groupName ? ` (${setup.groupName})` : ''}`,
+		'추가 역할은 선택 사항입니다. 기본 역할만 사용할 수도 있습니다.',
+	].join('\n');
+}
+
+function buildEmojiSetupComponents(interaction, setup) {
 	const rows = [];
+	const setupId = setup.id;
+	const additionalRoleIds = setup.additionalRoleIds || [];
+	const additionalRoleSelect = new RoleSelectMenuBuilder()
+		.setCustomId(`${ADDITIONAL_ROLE_SELECT_PREFIX}:${setupId}`)
+		.setPlaceholder('추가로 함께 부여/제거할 역할 선택')
+		.setMinValues(0)
+		.setMaxValues(MAX_REACTION_ROLE_COUNT - 1);
+
+	if (additionalRoleIds.length > 0) {
+		additionalRoleSelect.setDefaultRoles(additionalRoleIds);
+	}
+
+	rows.push(new ActionRowBuilder().addComponents(
+		additionalRoleSelect,
+	));
+
 	const guildEmojis = [...interaction.guild.emojis.cache.values()]
 		.sort((a, b) => a.name.localeCompare(b.name, 'ko'))
 		.slice(0, 25);
@@ -330,7 +397,8 @@ async function createReactionRoleFromInput(interaction, values) {
 		return;
 	}
 
-	const roleResult = await resolveRole(interaction, values.roleInput);
+	const roleInputs = values.roleInputs || [values.roleInput];
+	const roleResult = await resolveRoles(interaction, roleInputs);
 	if (roleResult.error) {
 		await interaction.editReply({
 			content: roleResult.error,
@@ -338,7 +406,9 @@ async function createReactionRoleFromInput(interaction, values) {
 		return;
 	}
 
-	const { role, botMember } = roleResult;
+	const { roles, botMember } = roleResult;
+	const [primaryRole] = roles;
+	const roleIds = roles.map(role => role.id);
 	const { channel: targetChannel } = targetChannelResult;
 	const requiredChannelPermissions = [
 		PermissionFlagsBits.ViewChannel,
@@ -374,7 +444,8 @@ async function createReactionRoleFromInput(interaction, values) {
 		emoji: emojiConfig.emoji,
 		emojiId: emojiConfig.emojiId,
 		emojiName: emojiConfig.emojiName,
-		roleId: role.id,
+		roleId: primaryRole.id,
+		roleIds,
 		title,
 		description,
 		mode: modeConfig.mode,
@@ -386,7 +457,7 @@ async function createReactionRoleFromInput(interaction, values) {
 	let reactionRoleMessage;
 	try {
 		reactionRoleMessage = await targetChannel.send({
-			embeds: [buildReactionRoleEmbed(pendingConfig, role)],
+			embeds: [buildReactionRoleEmbed(pendingConfig)],
 		});
 
 		const config = addReactionRole(interaction.client, {
@@ -412,7 +483,7 @@ async function createReactionRoleFromInput(interaction, values) {
 		content: [
 			'반응 역할 메시지를 생성했습니다.',
 			`채널: ${targetChannel}`,
-			`역할: <@&${role.id}>`,
+			`역할: ${roleIds.map(roleId => `<@&${roleId}>`).join(', ')}`,
 			`모드: ${modeConfig.mode}${modeConfig.groupName ? ` (${modeConfig.groupName})` : ''}`,
 			`메시지: ${reactionRoleMessage.url}`,
 		].join('\n'),
@@ -475,6 +546,7 @@ module.exports = {
 			ownerId: interaction.user.id,
 			channelId: targetChannel.id,
 			roleId: role.id,
+			additionalRoleIds: [],
 			mode,
 			groupName,
 			createdAt: Date.now(),
@@ -483,13 +555,8 @@ module.exports = {
 		saveSetup(interaction, setup);
 
 		await interaction.reply({
-			content: [
-				'반응 역할에 사용할 이모지를 선택해주세요.',
-				`채널: ${targetChannel}`,
-				`역할: <@&${role.id}>`,
-				`모드: ${mode}${groupName ? ` (${groupName})` : ''}`,
-			].join('\n'),
-			components: buildEmojiSetupComponents(interaction, setup.id),
+			content: buildSetupSummary(interaction, setup),
+			components: buildEmojiSetupComponents(interaction, setup),
 			flags: MessageFlags.Ephemeral,
 		});
 	},
@@ -497,9 +564,10 @@ module.exports = {
 		const customId = interaction.customId;
 		const isServerEmojiSelect = customId.startsWith(`${SERVER_EMOJI_SELECT_PREFIX}:`);
 		const isCommonEmojiSelect = customId.startsWith(`${COMMON_EMOJI_SELECT_PREFIX}:`);
+		const isAdditionalRoleSelect = customId.startsWith(`${ADDITIONAL_ROLE_SELECT_PREFIX}:`);
 		const isManualEmojiButton = customId.startsWith(`${MANUAL_EMOJI_BUTTON_PREFIX}:`);
 
-		if (!isServerEmojiSelect && !isCommonEmojiSelect && !isManualEmojiButton) {
+		if (!isServerEmojiSelect && !isCommonEmojiSelect && !isAdditionalRoleSelect && !isManualEmojiButton) {
 			return false;
 		}
 
@@ -517,6 +585,17 @@ module.exports = {
 			await interaction.reply({
 				content: '이 반응 역할 설정은 명령어를 실행한 사용자만 계속 진행할 수 있습니다.',
 				flags: MessageFlags.Ephemeral,
+			});
+			return true;
+		}
+
+		if (isAdditionalRoleSelect) {
+			setup.additionalRoleIds = [...new Set(interaction.values)]
+				.filter(roleId => roleId !== setup.roleId)
+				.slice(0, MAX_REACTION_ROLE_COUNT - 1);
+			await interaction.update({
+				content: buildSetupSummary(interaction, setup),
+				components: buildEmojiSetupComponents(interaction, setup),
 			});
 			return true;
 		}
@@ -584,7 +663,7 @@ module.exports = {
 			title: interaction.fields.getTextInputValue('title'),
 			description: interaction.fields.getTextInputValue('description') || '',
 			emojiInput,
-			roleInput: setup.roleId,
+			roleInputs: getSetupRoleIds(setup),
 			modeInput: setup.groupName ? `${setup.mode}:${setup.groupName}` : setup.mode,
 			channelId: setup.channelId,
 		});
@@ -592,4 +671,5 @@ module.exports = {
 		return true;
 	},
 	parseModeInput,
+	getSetupRoleIds,
 };

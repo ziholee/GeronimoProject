@@ -274,6 +274,12 @@ module.exports = {
 			}
 		}
 
+		if (interaction.isRoleSelectMenu()) {
+			if (await reactionRoleCommand.handleComponentInteraction?.(interaction)) {
+				return;
+			}
+		}
+
 		if (interaction.isModalSubmit()) {
 			if (await partyCreateCommand.handleModalSubmit?.(interaction)) {
 				return;

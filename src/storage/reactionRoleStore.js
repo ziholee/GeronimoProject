@@ -12,6 +12,15 @@ function ensureDataDir() {
 
 function normalizeReactionRole(config) {
 	const mode = config.mode || 'normal';
+	const roleIds = [...new Set(
+		(Array.isArray(config.roleIds) && config.roleIds.length > 0
+			? config.roleIds
+			: [config.roleId])
+			.filter(Boolean)
+			.map(roleId => String(roleId)),
+	)];
+	const [roleId] = roleIds;
+
 	return {
 		guildId: String(config.guildId),
 		channelId: String(config.channelId),
@@ -19,7 +28,8 @@ function normalizeReactionRole(config) {
 		emoji: String(config.emoji),
 		emojiId: config.emojiId ? String(config.emojiId) : null,
 		emojiName: config.emojiName ? String(config.emojiName) : null,
-		roleId: String(config.roleId),
+		roleId,
+		roleIds,
 		title: config.title || '반응 역할',
 		description: config.description || '',
 		mode,

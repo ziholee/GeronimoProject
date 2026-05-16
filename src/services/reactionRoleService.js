@@ -62,6 +62,14 @@ function normalizeReactionRoleConfig(config) {
 	const rawMode = String(config.mode || 'normal').toLowerCase();
 	const mode = REACTION_ROLE_MODES.has(rawMode) ? rawMode : 'normal';
 	const groupName = config.groupName ? String(config.groupName).trim() : null;
+	const roleIds = [...new Set(
+		(Array.isArray(config.roleIds) && config.roleIds.length > 0
+			? config.roleIds
+			: [config.roleId])
+			.filter(Boolean)
+			.map(roleId => String(roleId)),
+	)];
+	const [roleId] = roleIds;
 
 	return {
 		guildId: String(config.guildId),
@@ -70,7 +78,8 @@ function normalizeReactionRoleConfig(config) {
 		emoji: String(config.emoji),
 		emojiId: config.emojiId ? String(config.emojiId) : null,
 		emojiName: config.emojiName ? String(config.emojiName) : null,
-		roleId: String(config.roleId),
+		roleId,
+		roleIds,
 		title: config.title?.trim() || '반응 역할',
 		description: config.description?.trim() || '',
 		mode,
@@ -122,17 +131,31 @@ function reactionMatchesConfig(reaction, config) {
 	return reaction.emoji.name === config.emoji;
 }
 
-function getModeHelpText(config, role) {
+function getRoleIds(config) {
+	if (Array.isArray(config.roleIds) && config.roleIds.length > 0) {
+		return config.roleIds;
+	}
+
+	return [config.roleId].filter(Boolean);
+}
+
+function formatRoleMentions(config) {
+	return getRoleIds(config).map(roleId => `<@&${roleId}>`).join(', ');
+}
+
+function getModeHelpText(config) {
+	const roleMentions = formatRoleMentions(config);
+
 	switch (config.mode) {
 	case 'once':
-		return `${config.emoji} 반응을 누르면 <@&${role.id}> 역할을 한 번 부여합니다. 반응을 제거해도 역할은 유지됩니다.`;
+		return `${config.emoji} 반응을 누르면 ${roleMentions} 역할을 한 번 부여합니다. 반응을 제거해도 역할은 유지됩니다.`;
 	case 'remove':
-		return `${config.emoji} 반응을 누르면 <@&${role.id}> 역할을 제거합니다.`;
+		return `${config.emoji} 반응을 누르면 ${roleMentions} 역할을 제거합니다.`;
 	case 'toggle':
-		return `${config.emoji} 반응을 누르면 <@&${role.id}> 역할을 받습니다. 같은 그룹에서는 하나의 역할만 유지됩니다.`;
+		return `${config.emoji} 반응을 누르면 ${roleMentions} 역할을 받습니다. 같은 그룹에서는 하나의 선택만 유지됩니다.`;
 	case 'normal':
 	default:
-		return `${config.emoji} 반응을 누르면 <@&${role.id}> 역할을 받고, 반응을 제거하면 역할도 제거됩니다.`;
+		return `${config.emoji} 반응을 누르면 ${roleMentions} 역할을 받고, 반응을 제거하면 역할도 제거됩니다.`;
 	}
 }
 
@@ -152,13 +175,13 @@ function getModeFooter(config) {
 	}
 }
 
-function buildReactionRoleEmbed(config, role) {
+function buildReactionRoleEmbed(config) {
 	const description = config.description
-		? `${config.description}\n\n${getModeHelpText(config, role)}`
-		: getModeHelpText(config, role);
+		? `${config.description}\n\n${getModeHelpText(config)}`
+		: getModeHelpText(config);
 
 	const fields = [
-		{ name: '역할', value: `<@&${role.id}>`, inline: true },
+		{ name: '역할', value: formatRoleMentions(config), inline: true },
 		{ name: '이모지', value: config.emoji, inline: true },
 		{ name: '모드', value: MODE_LABELS[config.mode] || MODE_LABELS.normal, inline: true },
 	];
@@ -219,21 +242,21 @@ async function handleReactionRoleAdd(reaction, user) {
 	}
 
 	if (config.mode === 'remove') {
-		await member.roles.remove(config.roleId, 'Reaction role removed by remove-mode reaction').catch(error => {
+		await member.roles.remove(getRoleIds(config), 'Reaction role removed by remove-mode reaction').catch(error => {
 			console.error(`반응 역할 제거 실패 (${config.messageId}, ${user.id}):`, error);
 		});
 		await removeUserReaction(reaction, user.id);
 		return true;
 	}
 
-	await member.roles.add(config.roleId, `Reaction role added (${config.mode})`).catch(error => {
+	await member.roles.add(getRoleIds(config), `Reaction role added (${config.mode})`).catch(error => {
 		console.error(`반응 역할 부여 실패 (${config.messageId}, ${user.id}):`, error);
 	});
 
 	if (config.mode === 'toggle') {
 		const siblingConfigs = getToggleSiblings(reaction.client, config);
 		for (const siblingConfig of siblingConfigs) {
-			await member.roles.remove(siblingConfig.roleId, `Reaction role toggle group ${config.groupName}`).catch(error => {
+			await member.roles.remove(getRoleIds(siblingConfig), `Reaction role toggle group ${config.groupName}`).catch(error => {
 				console.error(`토글 그룹 역할 제거 실패 (${siblingConfig.messageId}, ${user.id}):`, error);
 			});
 			await removeSiblingReaction(reaction.client, siblingConfig, user.id);
@@ -262,7 +285,7 @@ async function handleReactionRoleRemove(reaction, user) {
 		return true;
 	}
 
-	await member.roles.remove(config.roleId, `Reaction role removed (${config.mode})`).catch(error => {
+	await member.roles.remove(getRoleIds(config), `Reaction role removed (${config.mode})`).catch(error => {
 		console.error(`반응 역할 제거 실패 (${config.messageId}, ${user.id}):`, error);
 	});
 
