@@ -38,6 +38,8 @@ module.exports = {
 
 		const top = membersData.slice(0, limit);
 
+		await interaction.deferReply();
+
 		const lines = await Promise.all(
 			top.map(async (entry, index) => {
 				const member = await interaction.guild.members
@@ -54,6 +56,6 @@ module.exports = {
 			.setDescription(lines.join('\n'))
 			.setTimestamp();
 
-		await interaction.reply({ embeds: [embed] });
+		await interaction.editReply({ embeds: [embed] });
 	},
 };

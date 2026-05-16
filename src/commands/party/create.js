@@ -107,6 +107,8 @@ async function createPartyFromInput(interaction, values) {
 		return;
 	}
 
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
 	const botMember = interaction.guild.members.me;
 	const requiredGuildPermissions = [
 		PermissionFlagsBits.ManageChannels,
@@ -121,17 +123,15 @@ async function createPartyFromInput(interaction, values) {
 	];
 
 	if (!botMember.permissions.has(requiredGuildPermissions)) {
-		await interaction.reply({
+		await interaction.editReply({
 			content: '파티 기능을 사용하려면 봇에 `채널 관리`와 `초대 링크 만들기` 권한이 필요합니다.',
-			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
 
 	if (!interaction.channel.permissionsFor(botMember).has(requiredChannelPermissions)) {
-		await interaction.reply({
+		await interaction.editReply({
 			content: '현재 채널에서 파티 모집 메시지를 만들 권한이 부족합니다. `메시지 보내기`, `임베드 링크`, `반응 추가`, `메시지 기록 읽기` 권한을 확인해주세요.',
-			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
@@ -166,20 +166,18 @@ async function createPartyFromInput(interaction, values) {
 	}
 	catch (error) {
 		console.error(`파티 모집 메시지 생성 실패 (${party.partyId}):`, error);
-		await interaction.reply({
+		await interaction.editReply({
 			content: '파티 모집 메시지를 생성하는 중 오류가 발생했습니다. 봇 권한과 채널 설정을 확인해주세요.',
-			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
 
-	await interaction.reply({
+	await interaction.editReply({
 		content: [
 			'파티 모집 메시지를 생성했습니다.',
 			`집합 시간: ${formatDiscordTimestamp(scheduledAt)}`,
 			`모집 메시지: ${recruitMessage.url}`,
 		].join('\n'),
-		flags: MessageFlags.Ephemeral,
 	});
 }
 

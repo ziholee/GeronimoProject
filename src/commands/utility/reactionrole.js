@@ -1,9 +1,13 @@
 const {
 	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	ChannelType,
 	MessageFlags,
 	ModalBuilder,
 	PermissionFlagsBits,
 	SlashCommandBuilder,
+	StringSelectMenuBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 } = require('discord.js');
@@ -14,10 +18,73 @@ const {
 	deleteReactionRole,
 	parseEmojiInput,
 	parseRoleId,
+	REACTION_ROLE_MODES,
 } = require('../../services/reactionRoleService');
 
 const MODAL_PREFIX = 'reaction_role_create';
-const SUPPORTED_MODE = 'toggle';
+const SERVER_EMOJI_SELECT_PREFIX = 'reaction_role_server_emoji';
+const COMMON_EMOJI_SELECT_PREFIX = 'reaction_role_common_emoji';
+const MANUAL_EMOJI_BUTTON_PREFIX = 'reaction_role_manual_emoji';
+const SETUP_TTL_MS = 15 * 60 * 1000;
+
+const COMMON_EMOJI_OPTIONS = [
+	{ label: '확인', value: '✅' },
+	{ label: '공지', value: '📢' },
+	{ label: '해커톤', value: '🏆' },
+	{ label: '스터디', value: '📚' },
+	{ label: 'AI', value: '🤖' },
+	{ label: '프론트엔드', value: '💻' },
+	{ label: '백엔드', value: '🛠️' },
+	{ label: '디자인', value: '🎨' },
+	{ label: '게임', value: '🎮' },
+	{ label: '빨강', value: '🔴' },
+	{ label: '파랑', value: '🔵' },
+	{ label: '초록', value: '🟢' },
+	{ label: '1번', value: '1️⃣' },
+	{ label: '2번', value: '2️⃣' },
+	{ label: '3번', value: '3️⃣' },
+	{ label: '4번', value: '4️⃣' },
+	{ label: '알림 해제', value: '🔕' },
+	{ label: '취소/제거', value: '❌' },
+	{ label: '차단/제외', value: '🚫' },
+	{ label: '즐겨찾기', value: '⭐' },
+];
+
+const MODE_ALIASES = new Map([
+	['normal', 'normal'],
+	['일반', 'normal'],
+	['once', 'once'],
+	['1회', 'once'],
+	['일회성', 'once'],
+	['인증', 'once'],
+	['remove', 'remove'],
+	['제거', 'remove'],
+	['toggle', 'toggle'],
+	['토글', 'toggle'],
+	['단일', 'toggle'],
+]);
+
+function ensureSetupStore(client) {
+	if (!client.reactionRoleSetups) {
+		client.reactionRoleSetups = new Map();
+	}
+	return client.reactionRoleSetups;
+}
+
+function getSetup(interaction, setupId) {
+	return ensureSetupStore(interaction.client).get(setupId);
+}
+
+function deleteSetup(interaction, setupId) {
+	ensureSetupStore(interaction.client).delete(setupId);
+}
+
+function saveSetup(interaction, setup) {
+	ensureSetupStore(interaction.client).set(setup.id, setup);
+	setTimeout(() => {
+		interaction.client.reactionRoleSetups?.delete(setup.id);
+	}, SETUP_TTL_MS).unref?.();
+}
 
 function hasManageRolePermission(interaction) {
 	return interaction.memberPermissions?.has(PermissionFlagsBits.ManageRoles)
@@ -26,6 +93,17 @@ function hasManageRolePermission(interaction) {
 
 async function getBotMember(guild) {
 	return guild.members.me ?? guild.members.fetchMe().catch(() => null);
+}
+
+async function getTargetChannel(interaction, channelId) {
+	const channel = interaction.guild.channels.cache.get(channelId)
+		?? await interaction.guild.channels.fetch(channelId).catch(() => null);
+
+	if (!channel?.isTextBased?.() || typeof channel.send !== 'function') {
+		return { error: '반응 역할 메시지를 보낼 텍스트 채널을 찾을 수 없습니다.' };
+	}
+
+	return { channel };
 }
 
 async function resolveRole(interaction, roleInput) {
@@ -64,6 +142,119 @@ async function resolveRole(interaction, roleInput) {
 	return { role, botMember };
 }
 
+function parseModeInput(input, title) {
+	const rawValue = input.trim();
+	if (!rawValue) {
+		return { mode: 'normal', groupName: null };
+	}
+
+	const [modeToken, groupToken] = rawValue.split(/[:=,]/, 2).map(part => part.trim());
+	let mode = MODE_ALIASES.get(modeToken.toLowerCase());
+	let groupName = groupToken || null;
+
+	if (!mode) {
+		const spaceMatch = rawValue.match(/^(\S+)\s+(.+)$/);
+		if (spaceMatch) {
+			mode = MODE_ALIASES.get(spaceMatch[1].toLowerCase());
+			groupName = spaceMatch[2].trim();
+		}
+	}
+
+	if (!mode || !REACTION_ROLE_MODES.has(mode)) {
+		return { error: '동작 방식은 `normal`, `once`, `remove`, `toggle` 중 하나로 입력해주세요.' };
+	}
+
+	return {
+		mode,
+		groupName: mode === 'toggle' ? (groupName || title.trim() || '반응 역할') : null,
+	};
+}
+
+function buildEmojiSetupComponents(interaction, setupId) {
+	const rows = [];
+	const guildEmojis = [...interaction.guild.emojis.cache.values()]
+		.sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+		.slice(0, 25);
+
+	if (guildEmojis.length > 0) {
+		rows.push(new ActionRowBuilder().addComponents(
+			new StringSelectMenuBuilder()
+				.setCustomId(`${SERVER_EMOJI_SELECT_PREFIX}:${setupId}`)
+				.setPlaceholder('서버 이모지 선택')
+				.addOptions(guildEmojis.map(emoji => ({
+					label: emoji.name,
+					value: emoji.id,
+					emoji: {
+						id: emoji.id,
+						name: emoji.name,
+						animated: emoji.animated,
+					},
+				}))),
+		));
+	}
+
+	rows.push(new ActionRowBuilder().addComponents(
+		new StringSelectMenuBuilder()
+			.setCustomId(`${COMMON_EMOJI_SELECT_PREFIX}:${setupId}`)
+			.setPlaceholder('자주 쓰는 이모지 선택')
+			.addOptions(COMMON_EMOJI_OPTIONS.map(option => ({
+				label: option.label,
+				value: option.value,
+				emoji: option.value,
+			}))),
+	));
+
+	rows.push(new ActionRowBuilder().addComponents(
+		new ButtonBuilder()
+			.setCustomId(`${MANUAL_EMOJI_BUTTON_PREFIX}:${setupId}`)
+			.setLabel('이모지 직접 입력')
+			.setStyle(ButtonStyle.Secondary),
+	));
+
+	return rows;
+}
+
+function buildDetailsModal(setupId, includeEmojiInput) {
+	const modal = new ModalBuilder()
+		.setCustomId(`${MODAL_PREFIX}:${setupId}:${includeEmojiInput ? 'manual' : 'selected'}`)
+		.setTitle('반응 역할 생성');
+
+	const titleInput = new TextInputBuilder()
+		.setCustomId('title')
+		.setLabel('제목')
+		.setStyle(TextInputStyle.Short)
+		.setPlaceholder('예: 게임 알림 역할')
+		.setRequired(true)
+		.setMaxLength(100);
+
+	const descriptionInput = new TextInputBuilder()
+		.setCustomId('description')
+		.setLabel('설명')
+		.setStyle(TextInputStyle.Paragraph)
+		.setPlaceholder('아래 이모지를 누르면 알림 역할을 받을 수 있습니다.')
+		.setRequired(false)
+		.setMaxLength(500);
+
+	modal.addComponents(
+		new ActionRowBuilder().addComponents(titleInput),
+		new ActionRowBuilder().addComponents(descriptionInput),
+	);
+
+	if (includeEmojiInput) {
+		const emojiInput = new TextInputBuilder()
+			.setCustomId('emoji')
+			.setLabel('이모지')
+			.setStyle(TextInputStyle.Short)
+			.setPlaceholder('예: 🎮 또는 <:name:id>')
+			.setRequired(true)
+			.setMaxLength(100);
+
+		modal.addComponents(new ActionRowBuilder().addComponents(emojiInput));
+	}
+
+	return modal;
+}
+
 async function createReactionRoleFromInput(interaction, values) {
 	if (!hasManageRolePermission(interaction)) {
 		await interaction.reply({
@@ -76,7 +267,7 @@ async function createReactionRoleFromInput(interaction, values) {
 	const title = values.title.trim();
 	const description = values.description.trim();
 	const emojiConfig = parseEmojiInput(values.emojiInput);
-	const mode = values.modeInput.trim().toLowerCase() || SUPPORTED_MODE;
+	const modeConfig = parseModeInput(values.modeInput, title);
 
 	if (!emojiConfig) {
 		await interaction.reply({
@@ -86,24 +277,34 @@ async function createReactionRoleFromInput(interaction, values) {
 		return;
 	}
 
-	if (mode !== SUPPORTED_MODE) {
+	if (modeConfig.error) {
 		await interaction.reply({
-			content: '현재 지원하는 동작 방식은 `toggle`입니다.',
+			content: modeConfig.error,
 			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+	const targetChannelResult = await getTargetChannel(interaction, values.channelId);
+	if (targetChannelResult.error) {
+		await interaction.editReply({
+			content: targetChannelResult.error,
 		});
 		return;
 	}
 
 	const roleResult = await resolveRole(interaction, values.roleInput);
 	if (roleResult.error) {
-		await interaction.reply({
+		await interaction.editReply({
 			content: roleResult.error,
-			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
 
 	const { role, botMember } = roleResult;
+	const { channel: targetChannel } = targetChannelResult;
 	const requiredChannelPermissions = [
 		PermissionFlagsBits.ViewChannel,
 		PermissionFlagsBits.SendMessages,
@@ -112,17 +313,28 @@ async function createReactionRoleFromInput(interaction, values) {
 		PermissionFlagsBits.ReadMessageHistory,
 	];
 
-	if (!interaction.channel?.permissionsFor(botMember)?.has(requiredChannelPermissions)) {
-		await interaction.reply({
-			content: '현재 채널에서 반응 역할 메시지를 만들 권한이 부족합니다. `메시지 보내기`, `임베드 링크`, `반응 추가`, `메시지 기록 읽기` 권한을 확인해주세요.',
-			flags: MessageFlags.Ephemeral,
+	if (modeConfig.mode === 'once' || modeConfig.mode === 'remove') {
+		requiredChannelPermissions.push(PermissionFlagsBits.ManageMessages);
+	}
+
+	const usesExternalEmoji = emojiConfig.emojiId && !interaction.guild.emojis.cache.has(emojiConfig.emojiId);
+	if (usesExternalEmoji) {
+		requiredChannelPermissions.push(PermissionFlagsBits.UseExternalEmojis);
+	}
+
+	if (!targetChannel.permissionsFor(botMember)?.has(requiredChannelPermissions)) {
+		const extraMessage = modeConfig.mode === 'once' || modeConfig.mode === 'remove'
+			? ' `once`/`remove` 모드는 유저 반응을 정리하기 위해 `메시지 관리` 권한도 필요합니다.'
+			: '';
+		await interaction.editReply({
+			content: `${targetChannel} 채널에서 반응 역할 메시지를 만들 권한이 부족합니다. \`메시지 보내기\`, \`임베드 링크\`, \`반응 추가\`, \`메시지 기록 읽기\` 권한을 확인해주세요.${extraMessage}`,
 		});
 		return;
 	}
 
 	const pendingConfig = {
 		guildId: interaction.guild.id,
-		channelId: interaction.channel.id,
+		channelId: targetChannel.id,
 		messageId: '0',
 		emoji: emojiConfig.emoji,
 		emojiId: emojiConfig.emojiId,
@@ -130,14 +342,15 @@ async function createReactionRoleFromInput(interaction, values) {
 		roleId: role.id,
 		title,
 		description,
-		mode,
+		mode: modeConfig.mode,
+		groupName: modeConfig.groupName,
 		createdBy: interaction.user.id,
 		createdAt: Date.now(),
 	};
 
 	let reactionRoleMessage;
 	try {
-		reactionRoleMessage = await interaction.channel.send({
+		reactionRoleMessage = await targetChannel.send({
 			embeds: [buildReactionRoleEmbed(pendingConfig, role)],
 		});
 
@@ -154,20 +367,20 @@ async function createReactionRoleFromInput(interaction, values) {
 			deleteReactionRole(interaction.client, reactionRoleMessage.id);
 		}
 
-		await interaction.reply({
+		await interaction.editReply({
 			content: '반응 역할 메시지를 생성하는 중 오류가 발생했습니다. 이모지 접근 권한과 봇 권한을 확인해주세요.',
-			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
 
-	await interaction.reply({
+	await interaction.editReply({
 		content: [
 			'반응 역할 메시지를 생성했습니다.',
+			`채널: ${targetChannel}`,
 			`역할: <@&${role.id}>`,
+			`모드: ${modeConfig.mode}${modeConfig.groupName ? ` (${modeConfig.groupName})` : ''}`,
 			`메시지: ${reactionRoleMessage.url}`,
 		].join('\n'),
-		flags: MessageFlags.Ephemeral,
 	});
 }
 
@@ -175,8 +388,40 @@ module.exports = {
 	guildOnly: true,
 	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('반응역할생성')
-		.setDescription('모달로 이모지 반응 역할 메시지를 생성합니다.')
-		.setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)),
+		.setDescription('Zira식 normal/once/remove/toggle 반응 역할 메시지를 생성합니다.')
+		.setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+		.addChannelOption(option =>
+			option
+				.setName('채널')
+				.setDescription('반응 역할 메시지를 보낼 채널')
+				.setRequired(true)
+				.addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+		)
+		.addRoleOption(option =>
+			option
+				.setName('역할')
+				.setDescription('반응으로 부여하거나 제거할 역할')
+				.setRequired(true),
+		)
+		.addStringOption(option =>
+			option
+				.setName('동작방식')
+				.setDescription('반응 역할 동작 방식')
+				.setRequired(false)
+				.addChoices(
+					{ name: 'normal - 반응 추가/제거에 맞춰 역할 부여/제거', value: 'normal' },
+					{ name: 'once - 한 번 부여하면 역할 유지', value: 'once' },
+					{ name: 'remove - 반응 시 역할 제거', value: 'remove' },
+					{ name: 'toggle - 같은 그룹에서 하나만 유지', value: 'toggle' },
+				),
+		)
+		.addStringOption(option =>
+			option
+				.setName('토글그룹')
+				.setDescription('toggle 모드에서 하나만 유지할 그룹 이름')
+				.setRequired(false)
+				.setMaxLength(60),
+		)),
 	async execute(interaction) {
 		if (!hasManageRolePermission(interaction)) {
 			await interaction.reply({
@@ -186,67 +431,101 @@ module.exports = {
 			return;
 		}
 
-		const modal = new ModalBuilder()
-			.setCustomId(`${MODAL_PREFIX}:${interaction.user.id}`)
-			.setTitle('반응 역할 생성');
+		const targetChannel = interaction.options.getChannel('채널', true);
+		const role = interaction.options.getRole('역할', true);
+		const mode = interaction.options.getString('동작방식') || 'normal';
+		const groupName = interaction.options.getString('토글그룹') || null;
+		const setup = {
+			id: interaction.id,
+			ownerId: interaction.user.id,
+			channelId: targetChannel.id,
+			roleId: role.id,
+			mode,
+			groupName,
+			createdAt: Date.now(),
+		};
 
-		const titleInput = new TextInputBuilder()
-			.setCustomId('title')
-			.setLabel('제목')
-			.setStyle(TextInputStyle.Short)
-			.setPlaceholder('예: 게임 알림 역할')
-			.setRequired(true)
-			.setMaxLength(100);
+		saveSetup(interaction, setup);
 
-		const descriptionInput = new TextInputBuilder()
-			.setCustomId('description')
-			.setLabel('설명')
-			.setStyle(TextInputStyle.Paragraph)
-			.setPlaceholder('아래 이모지를 누르면 알림 역할을 받을 수 있습니다.')
-			.setRequired(false)
-			.setMaxLength(500);
+		await interaction.reply({
+			content: [
+				'반응 역할에 사용할 이모지를 선택해주세요.',
+				`채널: ${targetChannel}`,
+				`역할: <@&${role.id}>`,
+				`모드: ${mode}${groupName ? ` (${groupName})` : ''}`,
+			].join('\n'),
+			components: buildEmojiSetupComponents(interaction, setup.id),
+			flags: MessageFlags.Ephemeral,
+		});
+	},
+	async handleComponentInteraction(interaction) {
+		const customId = interaction.customId;
+		const isServerEmojiSelect = customId.startsWith(`${SERVER_EMOJI_SELECT_PREFIX}:`);
+		const isCommonEmojiSelect = customId.startsWith(`${COMMON_EMOJI_SELECT_PREFIX}:`);
+		const isManualEmojiButton = customId.startsWith(`${MANUAL_EMOJI_BUTTON_PREFIX}:`);
 
-		const emojiInput = new TextInputBuilder()
-			.setCustomId('emoji')
-			.setLabel('이모지')
-			.setStyle(TextInputStyle.Short)
-			.setPlaceholder('예: 🎮 또는 <:name:id>')
-			.setRequired(true)
-			.setMaxLength(100);
+		if (!isServerEmojiSelect && !isCommonEmojiSelect && !isManualEmojiButton) {
+			return false;
+		}
 
-		const roleInput = new TextInputBuilder()
-			.setCustomId('role')
-			.setLabel('역할')
-			.setStyle(TextInputStyle.Short)
-			.setPlaceholder('역할 멘션 또는 역할 ID')
-			.setRequired(true)
-			.setMaxLength(100);
+		const [, setupId] = customId.split(':');
+		const setup = getSetup(interaction, setupId);
+		if (!setup) {
+			await interaction.reply({
+				content: '반응 역할 설정 세션이 만료되었습니다. 다시 `/반응역할생성`을 실행해주세요.',
+				flags: MessageFlags.Ephemeral,
+			});
+			return true;
+		}
 
-		const modeInput = new TextInputBuilder()
-			.setCustomId('mode')
-			.setLabel('동작 방식')
-			.setStyle(TextInputStyle.Short)
-			.setPlaceholder('기본값: toggle')
-			.setRequired(false)
-			.setMaxLength(20);
+		if (setup.ownerId !== interaction.user.id) {
+			await interaction.reply({
+				content: '이 반응 역할 설정은 명령어를 실행한 사용자만 계속 진행할 수 있습니다.',
+				flags: MessageFlags.Ephemeral,
+			});
+			return true;
+		}
 
-		modal.addComponents(
-			new ActionRowBuilder().addComponents(titleInput),
-			new ActionRowBuilder().addComponents(descriptionInput),
-			new ActionRowBuilder().addComponents(emojiInput),
-			new ActionRowBuilder().addComponents(roleInput),
-			new ActionRowBuilder().addComponents(modeInput),
-		);
+		if (isManualEmojiButton) {
+			await interaction.showModal(buildDetailsModal(setupId, true));
+			return true;
+		}
 
-		await interaction.showModal(modal);
+		if (isServerEmojiSelect) {
+			const emojiId = interaction.values[0];
+			const emoji = interaction.guild.emojis.cache.get(emojiId);
+			if (!emoji) {
+				await interaction.reply({
+					content: '선택한 서버 이모지를 찾을 수 없습니다. 직접 입력을 사용하거나 다시 시도해주세요.',
+					flags: MessageFlags.Ephemeral,
+				});
+				return true;
+			}
+			setup.emojiInput = `<${emoji.animated ? 'a' : ''}:${emoji.name}:${emoji.id}>`;
+		}
+		else {
+			setup.emojiInput = interaction.values[0];
+		}
+
+		await interaction.showModal(buildDetailsModal(setupId, false));
+		return true;
 	},
 	async handleModalSubmit(interaction) {
 		if (!interaction.customId.startsWith(`${MODAL_PREFIX}:`)) {
 			return false;
 		}
 
-		const [, userId] = interaction.customId.split(':');
-		if (userId !== interaction.user.id) {
+		const [, setupId, emojiSource] = interaction.customId.split(':');
+		const setup = getSetup(interaction, setupId);
+		if (!setup) {
+			await interaction.reply({
+				content: '반응 역할 설정 세션이 만료되었습니다. 다시 `/반응역할생성`을 실행해주세요.',
+				flags: MessageFlags.Ephemeral,
+			});
+			return true;
+		}
+
+		if (setup.ownerId !== interaction.user.id) {
 			await interaction.reply({
 				content: '이 반응 역할 생성 모달은 실행한 사용자만 제출할 수 있습니다.',
 				flags: MessageFlags.Ephemeral,
@@ -262,13 +541,20 @@ module.exports = {
 			return true;
 		}
 
+		const emojiInput = emojiSource === 'manual'
+			? interaction.fields.getTextInputValue('emoji')
+			: setup.emojiInput;
+
 		await createReactionRoleFromInput(interaction, {
 			title: interaction.fields.getTextInputValue('title'),
 			description: interaction.fields.getTextInputValue('description') || '',
-			emojiInput: interaction.fields.getTextInputValue('emoji'),
-			roleInput: interaction.fields.getTextInputValue('role'),
-			modeInput: interaction.fields.getTextInputValue('mode') || '',
+			emojiInput,
+			roleInput: setup.roleId,
+			modeInput: setup.groupName ? `${setup.mode}:${setup.groupName}` : setup.mode,
+			channelId: setup.channelId,
 		});
+		deleteSetup(interaction, setupId);
 		return true;
 	},
+	parseModeInput,
 };

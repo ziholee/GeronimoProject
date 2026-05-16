@@ -11,6 +11,7 @@ function ensureDataDir() {
 }
 
 function normalizeReactionRole(config) {
+	const mode = config.mode || 'normal';
 	return {
 		guildId: String(config.guildId),
 		channelId: String(config.channelId),
@@ -21,7 +22,8 @@ function normalizeReactionRole(config) {
 		roleId: String(config.roleId),
 		title: config.title || '반응 역할',
 		description: config.description || '',
-		mode: config.mode || 'toggle',
+		mode,
+		groupName: config.groupName ? String(config.groupName) : null,
 		createdBy: String(config.createdBy),
 		createdAt: Number(config.createdAt) || Date.now(),
 	};

@@ -72,6 +72,52 @@
 - [x] Update README current slash-command section against the 19-command registry
 - [x] Verify `/가이드` output and README cover all loaded slash commands
 
+- [x] Review lessons and current slash-command interaction flow
+- [x] Confirm command registration JSON and lint are currently clean
+- [x] Identify slash commands and modal paths that can exceed Discord's interaction ACK window
+- [x] Defer slow slash/modal work before external API calls, guild/member fetches, message sends, or reactions
+- [x] Verify dry-run command registration, lint, and targeted deferred-reply behavior
+- [x] Document review results for the interaction failure fix
+
+- [x] Read `zira_discord_bot_analysis.md` and compare it with the current reaction-role implementation
+- [x] Keep `/반응역할생성` modal flow while adding Zira-style role modes
+- [x] Support `normal`, `once`, `remove`, and grouped `toggle` behavior in reaction add/remove events
+- [x] Persist any new reaction-role config fields without breaking existing `data/reactionRoles.json`
+- [x] Update README and `/가이드` wording for the expanded reaction-role behavior
+- [x] Verify lint, command dry-run, and targeted reaction-role mode behavior
+- [x] Document review results for the Zira-inspired reaction-role improvement
+
+- [x] Confirm Discord modal cannot contain a channel picker, so channel selection must happen as a slash-command option
+- [x] Add a required target channel option to `/반응역할생성`
+- [x] Carry the selected channel through the reaction-role setup session
+- [x] Send the reaction-role embed and reaction to the selected channel instead of the command channel
+- [x] Update README for the new target-channel workflow
+- [x] Verify command JSON, lint, and targeted modal channel behavior
+
+- [x] Capture the correction that server-specific objects should use Discord picker options instead of typed IDs
+- [x] Move reaction-role role selection from modal text input to a native slash-command role option
+- [x] Move reaction-role mode selection from modal text input to slash-command choices
+- [x] Keep only free-text reaction-role fields in the modal
+- [x] Verify the slash option to modal handoff for selected channel, role, mode, and toggle group
+
+- [x] Add a reaction-role setup panel after the slash command for emoji selection
+- [x] Support server custom emoji selection through a Discord select menu
+- [x] Support common Unicode emoji click selection plus manual emoji input fallback
+- [x] Route reaction-role select menu/button interactions through `interactionCreate`
+- [x] Verify selected/manual emoji flows create the reaction-role message correctly
+
+- [x] Clarify in README that channel and role are selected through slash-command pickers, not inside the modal
+- [x] Clarify in README that the final modal only contains free-text fields after picker selections
+
+- [x] Make `/가이드` filter commands by the caller's permissions
+- [x] Keep administrator/manage-role commands visible to eligible admins while hiding them from regular users
+- [x] Make `/가이드` replies private so admin-only command lists are not exposed in public channels
+- [x] Verify guide filtering for regular, administrator, and manage-role users
+
+- [x] Refresh README against the current command registry and recent guide/reaction-role behavior
+- [x] Add any missing bot permission notes introduced by the picker-based reaction-role flow
+- [x] Verify README command coverage and formatting after the refresh
+
 # Review
 
 - README still referenced removed webhook features and older English-style command names such as `/level` and `/voice setup`
@@ -132,3 +178,28 @@
 - Added an uncategorized fallback section in `/가이드` so future loaded commands are not hidden if a category list is missed
 - Updated README's current slash-command section to state the live 19-command count and point users to `/가이드`
 - Verification after guide/README refresh: `/가이드` field generation covers all 19 commands with no overlong fields, README command coverage has no missing commands, `npx eslint src/commands/utility/guide.js src`, `npm run deploy -- --dry-run`, and `git diff --check` all pass
+- The interaction failure risk was in slash/modal paths that do external HTTP, guild/member fetches, channel message sends, or reaction creation before acknowledging the interaction
+- Updated `/밈`, `/서버`, `/랭킹`, `/로그조회`, `/파티생성` modal submission, and `/반응역할생성` modal submission to defer first on slow paths and finish with `editReply`
+- Kept fast validation replies immediate where they can fail before slow work, so users still get quick validation feedback without unnecessary loading states
+- Verification after the interaction fix: targeted fake-interaction checks confirm defer-before-edit behavior, `npx eslint src` passes, `npm run deploy -- --dry-run` validates all 19 commands, and `git diff --check` passes
+- `zira_discord_bot_analysis.md` showed the biggest gap in the current reaction-role feature was mode support: the bot only behaved like a single normal add/remove reaction despite exposing a mode field
+- Expanded `/반응역할생성` so the modal accepts `normal`, `once`, `remove`, and `toggle:그룹명`; Korean aliases such as `일반`, `인증`, `제거`, and `토글` are also accepted
+- Updated reaction add/remove handling so normal adds/removes roles, once grants and keeps roles, remove removes roles, and toggle removes sibling roles in the same group
+- Added `groupName` persistence with backward-compatible normalization for existing `data/reactionRoles.json` records
+- Updated README and the command description used by `/가이드` to document the new Zira-style modes and extra permissions for once/remove/external emoji cases
+- Verification after the Zira-inspired improvement: targeted mode parser and fake reaction checks pass, `npx eslint src` passes, `npm run deploy -- --dry-run` validates all 19 commands, and `git diff --check` passes
+- Improved `/반응역할생성` so server-specific values are chosen through Discord UI instead of typed IDs: `채널` uses a channel picker, `역할` uses a role picker, and `동작방식` uses fixed slash-command choices
+- Added a short-lived reaction-role setup session so the selected channel, role, mode, and toggle group survive the emoji selection and details modal flow
+- Added an emoji setup panel with server custom emoji select options, common Unicode emoji select options, and a manual input button for emojis not shown in the lists
+- Routed reaction-role select-menu and manual-input button interactions through `interactionCreate`
+- Reduced the final modal to free-text details: title, description, and only an emoji field when the manual input path is chosen
+- Updated README to document the new picker-first workflow and the remaining Discord limitation that full arbitrary emoji picking is not exposed by slash/modals
+- Verification after the picker workflow update: targeted picker handoff checks pass, `npx eslint src` passes, `npm run deploy -- --dry-run` validates all 19 commands, and `git diff --check` passes
+- README now explicitly states that Discord modals cannot render channel/role pickers, so `/반응역할생성` uses slash-command pickers for `채널`, `역할`, and `동작방식`, while the modal only asks for free-text details
+- Updated `/가이드` so it filters visible commands by the caller's permissions: regular users see public commands only, `Manage Roles` users also see `/반응역할생성`, and administrators see every loaded command
+- Made `/가이드` replies private with `MessageFlags.Ephemeral`, so admin-only command lists are visible only to the requester
+- Added a `가이드 닫기` button that deletes the guide reply when possible, with a fallback that clears the guide content
+- Documented the private, permission-aware `/가이드` behavior in README
+- Verification after the guide visibility update: permission-filter checks pass, dismiss-button checks pass, `npx eslint src` passes, and `npm run deploy -- --dry-run` validates all 19 commands
+- Refreshed README after the latest guide/reaction-role changes: the command list now describes permission-aware `/가이드`, the bot invite permissions include `Manage Messages` and `Use External Emojis`, and all 19 loaded slash commands are still referenced
+- Verification after the README refresh: command coverage script reports 19 commands and no missing README references, and `git diff --check` passes

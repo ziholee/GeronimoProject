@@ -1,6 +1,7 @@
 const { Events, MessageFlags, ActionRowBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { endVote, updateVoteEmbed } = require('../commands/utility/vote');
 const giveawayCommand = require('../commands/utility/giveway');
+const guideCommand = require('../commands/utility/guide');
 const reactionRoleCommand = require('../commands/utility/reactionrole');
 const partyCreateCommand = require('../commands/party/create');
 const { rejectNonGuildInteraction } = require('../utils/commandContext');
@@ -10,6 +11,14 @@ module.exports = {
 	async execute(interaction) {
 		// 버튼 상호작용 처리
 		if (interaction.isButton()) {
+			if (await guideCommand.handleButtonInteraction?.(interaction)) {
+				return;
+			}
+
+			if (await reactionRoleCommand.handleComponentInteraction?.(interaction)) {
+				return;
+			}
+
 			if (await giveawayCommand.handleButtonInteraction?.(interaction)) {
 				return;
 			}
@@ -255,6 +264,12 @@ module.exports = {
 
 				const { embed, buttonRows } = updateVoteEmbed(interaction.message.embeds[0], currentVote);
 				await interaction.update({ embeds: [embed], components: buttonRows });
+				return;
+			}
+		}
+
+		if (interaction.isStringSelectMenu()) {
+			if (await reactionRoleCommand.handleComponentInteraction?.(interaction)) {
 				return;
 			}
 		}

@@ -138,6 +138,8 @@ module.exports = {
 		const logType = interaction.options.getString('타입');
 		const limit = interaction.options.getInteger('개수') || (subcommand === '사용자' ? 10 : 20);
 
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
 		try {
 			if (subcommand === '사용자') {
 				const targetUser = interaction.options.getUser('사용자');
@@ -147,9 +149,8 @@ module.exports = {
 				});
 
 				if (logs.length === 0) {
-					return interaction.reply({
+					return interaction.editReply({
 						content: `${targetUser}님의 로그가 없습니다.`,
-						flags: MessageFlags.Ephemeral,
 					});
 				}
 
@@ -172,9 +173,8 @@ module.exports = {
 					embed.setDescription(`최근 10개만 표시됩니다. (전체: ${logs.length}개)`);
 				}
 
-				await interaction.reply({
+				await interaction.editReply({
 					embeds: [embed],
-					flags: MessageFlags.Ephemeral,
 				});
 			}
 			else if (subcommand === '전체') {
@@ -184,9 +184,8 @@ module.exports = {
 				});
 
 				if (logs.length === 0) {
-					return interaction.reply({
+					return interaction.editReply({
 						content: '서버에 로그가 없습니다.',
-						flags: MessageFlags.Ephemeral,
 					});
 				}
 
@@ -212,17 +211,15 @@ module.exports = {
 					embed.setFooter({ text: `최근 15개만 표시됩니다. (전체: ${logs.length}개)` });
 				}
 
-				await interaction.reply({
+				await interaction.editReply({
 					embeds: [embed],
-					flags: MessageFlags.Ephemeral,
 				});
 			}
 		}
 		catch (error) {
 			console.error('로그 조회 오류:', error);
-			await interaction.reply({
+			await interaction.editReply({
 				content: `❌ 로그 조회 중 오류가 발생했습니다: ${error.message}`,
-				flags: MessageFlags.Ephemeral,
 			});
 		}
 	},
