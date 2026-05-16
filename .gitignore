@@ -8,3 +8,11 @@ data/images/
 .cursor
 docs/prd.md
 tasks/
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+.idea/
+.vscode/
+zira_discord_bot_analysis.md
