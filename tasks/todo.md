@@ -118,6 +118,19 @@
 - [x] Add any missing bot permission notes introduced by the picker-based reaction-role flow
 - [x] Verify README command coverage and formatting after the refresh
 
+- [x] Capture review lesson for toggle reaction UI/state synchronization
+- [x] Remove sibling user reactions when a toggle reaction role is selected
+- [x] Update toggle permission notes to include reaction cleanup requirements
+- [x] Verify toggle role and reaction cleanup with a targeted fake reaction test
+
+- [x] Link common reaction-role emoji options to matching server custom emojis when available
+- [x] Keep Unicode common emoji fallback when no matching server emoji exists
+- [x] Verify common emoji selection stores the matched server emoji mention
+
+- [x] Refresh README for toggle sibling reaction cleanup behavior
+- [x] Document common emoji to server custom emoji matching rules
+- [x] Verify README still matches the loaded slash-command registry
+
 # Review
 
 - README still referenced removed webhook features and older English-style command names such as `/level` and `/voice setup`
@@ -203,3 +216,9 @@
 - Verification after the guide visibility update: permission-filter checks pass, dismiss-button checks pass, `npx eslint src` passes, and `npm run deploy -- --dry-run` validates all 19 commands
 - Refreshed README after the latest guide/reaction-role changes: the command list now describes permission-aware `/가이드`, the bot invite permissions include `Manage Messages` and `Use External Emojis`, and all 19 loaded slash commands are still referenced
 - Verification after the README refresh: command coverage script reports 19 commands and no missing README references, and `git diff --check` passes
+- Fixed the reviewed toggle reaction-role issue by removing the user's sibling reactions from other messages in the same toggle group after removing sibling roles, so the Discord reaction UI stays aligned with the actual assigned role
+- Updated toggle permission documentation and command validation so `toggle` mode also requires `Manage Messages`, which is needed to clean up sibling reactions
+- Improved the common emoji picker so common options prefer matching server custom emojis such as `notice`, `study`, `frontend`, or `verified`, while keeping Unicode fallback when no matching server emoji exists
+- Verification after the review fix and emoji mapping update: targeted common-emoji and toggle-cleanup fake tests pass, `npx eslint src/commands/utility/reactionrole.js src/services/reactionRoleService.js` passes, full `npx eslint src` passes, `npm run deploy -- --dry-run` validates all 19 commands, and `git diff --check` passes
+- Refreshed README to explicitly document that toggle mode cleans up sibling reactions as well as sibling roles, and that common emoji options can resolve to matching server custom emojis by label or alias
+- Verification after the README refresh: `git diff --check` passes, targeted reaction-role ESLint passes, and `npm run deploy -- --dry-run` validates all 19 slash commands

@@ -182,6 +182,31 @@ async function removeUserReaction(reaction, userId) {
 	});
 }
 
+async function getReactionRoleMessage(client, config) {
+	const channel = client.channels.cache.get(config.channelId)
+		?? await client.channels.fetch(config.channelId).catch(() => null);
+	if (!channel?.messages) {
+		return null;
+	}
+
+	return channel.messages.cache.get(config.messageId)
+		?? await channel.messages.fetch(config.messageId).catch(() => null);
+}
+
+async function removeSiblingReaction(client, config, userId) {
+	const message = await getReactionRoleMessage(client, config);
+	if (!message) {
+		return;
+	}
+
+	const reaction = message.reactions.cache.find(candidate => reactionMatchesConfig(candidate, config));
+	if (!reaction) {
+		return;
+	}
+
+	await removeUserReaction(reaction, userId);
+}
+
 async function handleReactionRoleAdd(reaction, user) {
 	const config = getReactionRoleByMessageId(reaction.client, reaction.message.id);
 	if (!config || config.guildId !== reaction.message.guildId || !reactionMatchesConfig(reaction, config)) {
@@ -211,6 +236,7 @@ async function handleReactionRoleAdd(reaction, user) {
 			await member.roles.remove(siblingConfig.roleId, `Reaction role toggle group ${config.groupName}`).catch(error => {
 				console.error(`토글 그룹 역할 제거 실패 (${siblingConfig.messageId}, ${user.id}):`, error);
 			});
+			await removeSiblingReaction(reaction.client, siblingConfig, user.id);
 		}
 	}
 
@@ -255,4 +281,5 @@ module.exports = {
 	persistReactionRoles,
 	REACTION_ROLE_MODES,
 	reactionMatchesConfig,
+	removeSiblingReaction,
 };

@@ -28,26 +28,26 @@ const MANUAL_EMOJI_BUTTON_PREFIX = 'reaction_role_manual_emoji';
 const SETUP_TTL_MS = 15 * 60 * 1000;
 
 const COMMON_EMOJI_OPTIONS = [
-	{ label: '확인', value: '✅' },
-	{ label: '공지', value: '📢' },
-	{ label: '해커톤', value: '🏆' },
-	{ label: '스터디', value: '📚' },
-	{ label: 'AI', value: '🤖' },
-	{ label: '프론트엔드', value: '💻' },
-	{ label: '백엔드', value: '🛠️' },
-	{ label: '디자인', value: '🎨' },
-	{ label: '게임', value: '🎮' },
-	{ label: '빨강', value: '🔴' },
-	{ label: '파랑', value: '🔵' },
-	{ label: '초록', value: '🟢' },
-	{ label: '1번', value: '1️⃣' },
-	{ label: '2번', value: '2️⃣' },
-	{ label: '3번', value: '3️⃣' },
-	{ label: '4번', value: '4️⃣' },
-	{ label: '알림 해제', value: '🔕' },
-	{ label: '취소/제거', value: '❌' },
-	{ label: '차단/제외', value: '🚫' },
-	{ label: '즐겨찾기', value: '⭐' },
+	{ label: '확인', value: '✅', aliases: ['check', 'confirm', 'verified', 'verify', 'agree', 'yes', 'ok'] },
+	{ label: '공지', value: '📢', aliases: ['notice', 'announce', 'announcement', 'alarm', 'alert'] },
+	{ label: '해커톤', value: '🏆', aliases: ['hackathon', 'event', 'trophy', 'award'] },
+	{ label: '스터디', value: '📚', aliases: ['study', 'book', 'books', 'learn'] },
+	{ label: 'AI', value: '🤖', aliases: ['ai', 'bot', 'robot'] },
+	{ label: '프론트엔드', value: '💻', aliases: ['frontend', 'front', 'web', 'client'] },
+	{ label: '백엔드', value: '🛠️', aliases: ['backend', 'back', 'server', 'api'] },
+	{ label: '디자인', value: '🎨', aliases: ['design', 'art', 'paint', 'planning'] },
+	{ label: '게임', value: '🎮', aliases: ['game', 'gaming', 'play'] },
+	{ label: '빨강', value: '🔴', aliases: ['red'] },
+	{ label: '파랑', value: '🔵', aliases: ['blue'] },
+	{ label: '초록', value: '🟢', aliases: ['green'] },
+	{ label: '1번', value: '1️⃣', aliases: ['one', 'first', '1'] },
+	{ label: '2번', value: '2️⃣', aliases: ['two', 'second', '2'] },
+	{ label: '3번', value: '3️⃣', aliases: ['three', 'third', '3'] },
+	{ label: '4번', value: '4️⃣', aliases: ['four', 'fourth', '4'] },
+	{ label: '알림 해제', value: '🔕', aliases: ['mute', 'silent', 'unsubscribe', 'noalarm'] },
+	{ label: '취소/제거', value: '❌', aliases: ['cancel', 'remove', 'delete', 'no', 'x'] },
+	{ label: '차단/제외', value: '🚫', aliases: ['block', 'ban', 'deny', 'exclude'] },
+	{ label: '즐겨찾기', value: '⭐', aliases: ['star', 'favorite', 'fav'] },
 ];
 
 const MODE_ALIASES = new Map([
@@ -170,6 +170,45 @@ function parseModeInput(input, title) {
 	};
 }
 
+function normalizeEmojiName(name) {
+	return name.toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
+}
+
+function formatCustomEmoji(emoji) {
+	return `<${emoji.animated ? 'a' : ''}:${emoji.name}:${emoji.id}>`;
+}
+
+function findMatchingServerEmoji(guild, option) {
+	const aliases = new Set([option.label, ...option.aliases].map(normalizeEmojiName));
+	return [...guild.emojis.cache.values()]
+		.find(emoji => aliases.has(normalizeEmojiName(emoji.name)));
+}
+
+function buildCommonEmojiOptions(guild) {
+	return COMMON_EMOJI_OPTIONS.map(option => {
+		const serverEmoji = findMatchingServerEmoji(guild, option);
+		if (serverEmoji) {
+			return {
+				label: `${option.label} (서버 이모지)`,
+				value: formatCustomEmoji(serverEmoji),
+				description: serverEmoji.name,
+				emoji: {
+					id: serverEmoji.id,
+					name: serverEmoji.name,
+					animated: serverEmoji.animated,
+				},
+			};
+		}
+
+		return {
+			label: option.label,
+			value: option.value,
+			description: '기본 이모지',
+			emoji: option.value,
+		};
+	});
+}
+
 function buildEmojiSetupComponents(interaction, setupId) {
 	const rows = [];
 	const guildEmojis = [...interaction.guild.emojis.cache.values()]
@@ -197,11 +236,7 @@ function buildEmojiSetupComponents(interaction, setupId) {
 		new StringSelectMenuBuilder()
 			.setCustomId(`${COMMON_EMOJI_SELECT_PREFIX}:${setupId}`)
 			.setPlaceholder('자주 쓰는 이모지 선택')
-			.addOptions(COMMON_EMOJI_OPTIONS.map(option => ({
-				label: option.label,
-				value: option.value,
-				emoji: option.value,
-			}))),
+			.addOptions(buildCommonEmojiOptions(interaction.guild)),
 	));
 
 	rows.push(new ActionRowBuilder().addComponents(
@@ -313,7 +348,7 @@ async function createReactionRoleFromInput(interaction, values) {
 		PermissionFlagsBits.ReadMessageHistory,
 	];
 
-	if (modeConfig.mode === 'once' || modeConfig.mode === 'remove') {
+	if (modeConfig.mode === 'once' || modeConfig.mode === 'remove' || modeConfig.mode === 'toggle') {
 		requiredChannelPermissions.push(PermissionFlagsBits.ManageMessages);
 	}
 
@@ -323,8 +358,8 @@ async function createReactionRoleFromInput(interaction, values) {
 	}
 
 	if (!targetChannel.permissionsFor(botMember)?.has(requiredChannelPermissions)) {
-		const extraMessage = modeConfig.mode === 'once' || modeConfig.mode === 'remove'
-			? ' `once`/`remove` 모드는 유저 반응을 정리하기 위해 `메시지 관리` 권한도 필요합니다.'
+		const extraMessage = modeConfig.mode === 'once' || modeConfig.mode === 'remove' || modeConfig.mode === 'toggle'
+			? ' `once`/`remove`/`toggle` 모드는 유저 반응을 정리하기 위해 `메시지 관리` 권한도 필요합니다.'
 			: '';
 		await interaction.editReply({
 			content: `${targetChannel} 채널에서 반응 역할 메시지를 만들 권한이 부족합니다. \`메시지 보내기\`, \`임베드 링크\`, \`반응 추가\`, \`메시지 기록 읽기\` 권한을 확인해주세요.${extraMessage}`,
