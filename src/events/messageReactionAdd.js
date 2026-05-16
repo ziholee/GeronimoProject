@@ -5,6 +5,7 @@ const {
 	getPartyByMessageId,
 	refreshPartyMessage,
 } = require('../services/partyService');
+const { handleReactionRoleAdd } = require('../services/reactionRoleService');
 
 module.exports = {
 	name: Events.MessageReactionAdd,
@@ -13,25 +14,32 @@ module.exports = {
 			return;
 		}
 
+		let currentReaction = reaction;
 		if (reaction.partial) {
-			await reaction.fetch().catch(() => null);
+			currentReaction = await reaction.fetch().catch(() => null);
+			if (!currentReaction) {
+				return;
+			}
 		}
 
-		if (!reaction.message?.guildId || reaction.emoji.name !== PARTY_REACTION_EMOJI) {
+		if (!currentReaction.message?.guildId) {
 			return;
 		}
 
-		const party = getPartyByMessageId(reaction.client, reaction.message.id);
-		if (!party) {
-			return;
+		if (currentReaction.emoji.name === PARTY_REACTION_EMOJI) {
+			const party = getPartyByMessageId(currentReaction.client, currentReaction.message.id);
+			if (party) {
+				const result = addPartyMember(currentReaction.client, party, user.id);
+				if (!result.ok) {
+					await currentReaction.users.remove(user.id).catch(() => null);
+					return;
+				}
+
+				await refreshPartyMessage(currentReaction.client, party);
+				return;
+			}
 		}
 
-		const result = addPartyMember(reaction.client, party, user.id);
-		if (!result.ok) {
-			await reaction.users.remove(user.id).catch(() => null);
-			return;
-		}
-
-		await refreshPartyMessage(reaction.client, party);
+		await handleReactionRoleAdd(currentReaction, user);
 	},
 };

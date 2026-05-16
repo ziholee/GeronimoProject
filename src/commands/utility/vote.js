@@ -1,7 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 
 module.exports = {
-	data: new SlashCommandBuilder()
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('투표')
 		.setDescription('투표를 생성합니다.')
 		.addStringOption(option =>
@@ -15,7 +17,7 @@ module.exports = {
 		.addStringOption(option =>
 			option.setName('선택지2')
 				.setDescription('두 번째 선택지')
-				.setRequired(true)),
+				.setRequired(true))),
 	async execute(interaction) {
 		try {
 			const title = interaction.options.getString('제목');
@@ -74,7 +76,7 @@ module.exports = {
 		catch (error) {
 			console.error('투표 생성 중 오류:', error);
 			if (!interaction.replied && !interaction.deferred) {
-				await interaction.reply({ content: '투표 생성 중 오류가 발생했습니다. 다시 시도해 주세요.', flags: MessageFlags.Ephemeral }).catch(() => {});
+				await interaction.reply({ content: '투표 생성 중 오류가 발생했습니다. 다시 시도해 주세요.', flags: MessageFlags.Ephemeral }).catch(() => null);
 			}
 		}
 	},
@@ -398,7 +400,7 @@ function updateVoteEmbed(originalEmbed, vote) {
 	const fields = vote.choices.map((choice, index) => {
 		const voteCount = vote.voters?.get(index)?.size || 0;
 		const voters = vote.voters?.get(index);
-		
+
 		let value = `${voteCount}표`;
 		if (!vote.isAnonymous && voters && voters.size > 0) {
 			const voterNames = Array.from(voters)
@@ -407,13 +409,13 @@ function updateVoteEmbed(originalEmbed, vote) {
 					return member ? member.displayName : `<@${id}>`;
 				})
 				.slice(0, 10);
-			
+
 			value += `\n투표자: ${voterNames.join(', ')}`;
 			if (voters.size > 10) {
 				value += ` 외 ${voters.size - 10}명`;
 			}
 		}
-		
+
 		return {
 			name: `${emojis[index]} ${choice}`,
 			value,
@@ -472,4 +474,3 @@ function updateVoteEmbed(originalEmbed, vote) {
 module.exports.createVoteEmbed = createVoteEmbed;
 module.exports.updateVoteEmbed = updateVoteEmbed;
 module.exports.endVote = endVote;
-

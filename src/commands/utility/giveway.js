@@ -10,6 +10,7 @@ const {
 	MessageFlags,
 	PermissionFlagsBits,
 } = require('discord.js');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 
 const GIVEAWAY_EMOJI = '🎉';
 const DEFAULT_DURATION_MINUTES = 60;
@@ -20,9 +21,10 @@ const MAX_WINNERS_COUNT = 10;
 const PARTICIPANT_DISPLAY_LIMIT = 20;
 
 module.exports = {
-	data: new SlashCommandBuilder()
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('게이브어웨이')
-		.setDescription('임베드 UI를 통해 리액션 게이브어웨이를 설정합니다.'),
+		.setDescription('임베드 UI를 통해 리액션 게이브어웨이를 설정합니다.')),
 	async execute(interaction) {
 		const setups = ensureSetupStore(interaction.client);
 		const setupId = interaction.id;

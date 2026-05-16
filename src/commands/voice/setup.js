@@ -1,8 +1,10 @@
 const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const { saveVoiceMasterChannels } = require('../../storage/voiceMasterStore');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 
 module.exports = {
-	data: new SlashCommandBuilder()
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('음성채널설정')
 		.setDescription('음성 채널 자동 생성 기능을 설정합니다.')
 		.addChannelOption(option =>
@@ -10,23 +12,23 @@ module.exports = {
 				.setName('채널')
 				.setDescription('자동 생성 채널로 설정할 음성 채널')
 				.setRequired(true)
-				.addChannelTypes(2)), // Voice Channel
+				.addChannelTypes(2))),
 	async execute(interaction) {
 		if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
 			await interaction.reply({ content: '이 명령어를 사용하려면 서버 관리자 권한이 필요합니다.', flags: MessageFlags.Ephemeral });
 			return;
 		}
-		
+
 		const channel = interaction.options.getChannel('채널');
-		
+
 		if (channel.type !== 2) {
 			await interaction.reply({ content: '음성 채널만 설정할 수 있습니다.', flags: MessageFlags.Ephemeral });
 			return;
 		}
-		
+
 		// 자동 생성 채널 목록 초기화
 		interaction.client.voiceMasterChannels = interaction.client.voiceMasterChannels || new Map();
-		
+
 		const guildId = interaction.guild.id;
 		if (!interaction.client.voiceMasterChannels.has(guildId)) {
 			interaction.client.voiceMasterChannels.set(guildId, new Set());
@@ -47,4 +49,3 @@ module.exports = {
 		saveVoiceMasterChannels(interaction.client.voiceMasterChannels);
 	},
 };
-

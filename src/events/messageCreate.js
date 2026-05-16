@@ -8,7 +8,7 @@ const {
 const { addLog } = require('../storage/logStore');
 
 // 기본 설정 값
-const DEFAULT_COOLDOWN_MS = 60_000; // 60초
+const DEFAULT_COOLDOWN_MS = 60_000;
 const MIN_MESSAGE_LENGTH = 3;
 const PREFIX = '!';
 
@@ -205,5 +205,3 @@ module.exports = {
 		saveLevelData(client.levelData);
 	},
 };
-
-

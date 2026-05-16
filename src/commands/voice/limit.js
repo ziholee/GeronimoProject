@@ -1,7 +1,9 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 
 module.exports = {
-	data: new SlashCommandBuilder()
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('채널인원제한')
 		.setDescription('현재 음성 채널의 최대 인원을 설정합니다.')
 		.addIntegerOption(option =>
@@ -10,36 +12,36 @@ module.exports = {
 				.setDescription('최대 인원 수 (0으로 설정하면 제한 없음)')
 				.setRequired(true)
 				.setMinValue(0)
-				.setMaxValue(99)),
+				.setMaxValue(99))),
 	async execute(interaction) {
 		if (!interaction.member.voice.channel) {
 			await interaction.reply({ content: '음성 채널에 먼저 입장해주세요.', flags: MessageFlags.Ephemeral });
 			return;
 		}
-		
+
 		const voiceChannel = interaction.member.voice.channel;
 		const client = interaction.client;
-		
+
 		// 임시 채널인지 확인
 		if (!client.tempVoiceChannels?.has(voiceChannel.id)) {
 			await interaction.reply({ content: '이 명령어는 자동 생성된 임시 채널에서만 사용할 수 있습니다.', flags: MessageFlags.Ephemeral });
 			return;
 		}
-		
+
 		const channelInfo = client.tempVoiceChannels.get(voiceChannel.id);
-		
+
 		// 채널 소유자 확인
 		if (channelInfo.ownerId !== interaction.user.id) {
 			await interaction.reply({ content: '이 채널의 소유자만 인원 제한을 설정할 수 있습니다.', flags: MessageFlags.Ephemeral });
 			return;
 		}
-		
+
 		const limit = interaction.options.getInteger('인원');
-		
+
 		try {
 			await voiceChannel.setUserLimit(limit === 0 ? null : limit);
-			const message = limit === 0 
-				? '채널 인원 제한이 해제되었습니다.' 
+			const message = limit === 0
+				? '채널 인원 제한이 해제되었습니다.'
 				: `채널 최대 인원이 ${limit}명으로 설정되었습니다.`;
 			await interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
 		}
@@ -49,4 +51,3 @@ module.exports = {
 		}
 	},
 };
-

@@ -1,6 +1,9 @@
-const { Events, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { Events, MessageFlags, ActionRowBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { endVote, updateVoteEmbed } = require('../commands/utility/vote');
 const giveawayCommand = require('../commands/utility/giveway');
+const reactionRoleCommand = require('../commands/utility/reactionrole');
+const partyCreateCommand = require('../commands/party/create');
+const { rejectNonGuildInteraction } = require('../utils/commandContext');
 
 module.exports = {
 	name: Events.InteractionCreate,
@@ -22,26 +25,26 @@ module.exports = {
 					await interaction.reply({ content: '투표를 찾을 수 없습니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
-				
+
 				if (vote.ended) {
 					await interaction.reply({ content: '이미 종료된 투표입니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
-				
+
 				const isCreator = interaction.user.id === vote.creatorId;
 				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
-				
+
 				if (!isCreator && !isAdmin) {
 					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 종료할 수 있습니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
-				
+
 				const channelId = interaction.channel?.id || vote.channelId;
 				if (!channelId) {
 					await interaction.reply({ content: '채널을 찾을 수 없습니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
-				
+
 				await endVote(interaction.client, messageId, vote, channelId);
 				await interaction.reply({ content: '투표가 종료되었습니다.', flags: MessageFlags.Ephemeral });
 				return;
@@ -53,15 +56,15 @@ module.exports = {
 					await interaction.reply({ content: '투표를 찾을 수 없거나 이미 종료되었습니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
-				
+
 				const isCreator = interaction.user.id === vote.creatorId;
 				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
-				
+
 				if (!isCreator && !isAdmin) {
 					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 설정을 변경할 수 있습니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
-				
+
 				vote.isAnonymous = !vote.isAnonymous;
 				vote.guild = interaction.guild;
 				const { embed, buttonRows } = updateVoteEmbed(interaction.message.embeds[0], vote);
@@ -75,15 +78,15 @@ module.exports = {
 					await interaction.reply({ content: '투표를 찾을 수 없거나 이미 종료되었습니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
-				
+
 				const isCreator = interaction.user.id === vote.creatorId;
 				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
-				
+
 				if (!isCreator && !isAdmin) {
 					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 설정을 변경할 수 있습니다.', flags: MessageFlags.Ephemeral });
 					return;
 				}
-				
+
 				vote.allowMultiple = !vote.allowMultiple;
 				vote.guild = interaction.guild;
 				const { embed, buttonRows } = updateVoteEmbed(interaction.message.embeds[0], vote);
@@ -100,7 +103,7 @@ module.exports = {
 
 				const isCreator = interaction.user.id === vote.creatorId;
 				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
-				
+
 				if (!isCreator && !isAdmin) {
 					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 설정을 변경할 수 있습니다.', flags: MessageFlags.Ephemeral });
 					return;
@@ -137,7 +140,7 @@ module.exports = {
 
 				const isCreator = interaction.user.id === vote.creatorId;
 				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
-				
+
 				if (!isCreator && !isAdmin) {
 					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 선택지를 추가할 수 있습니다.', flags: MessageFlags.Ephemeral });
 					return;
@@ -159,12 +162,12 @@ module.exports = {
 				await interaction.showModal(modal);
 				return;
 			}
-			
+
 			// 투표 버튼 처리
 			if (customId.startsWith('vote_') && /^\d+$/.test(customId.split('_')[1])) {
 				const parts = customId.split('_');
 				const choiceIndex = parseInt(parts[1]);
-				
+
 				let currentVote = vote;
 				// voteData가 없으면 임베드에서 복구 시도 (봇 재시작 등)
 				if (!currentVote && interaction.message.embeds?.[0]) {
@@ -213,7 +216,7 @@ module.exports = {
 				if (!currentVote.voters) {
 					currentVote.voters = new Map();
 				}
-				
+
 				if (!currentVote.allowMultiple) {
 					if (currentVote.voters.has(choiceIndex) && currentVote.voters.get(choiceIndex).has(userId)) {
 						currentVote.voters.get(choiceIndex).delete(userId);
@@ -230,28 +233,26 @@ module.exports = {
 								}
 							}
 						}
-						
+
 						if (!currentVote.voters.has(choiceIndex)) {
 							currentVote.voters.set(choiceIndex, new Set());
 						}
 						currentVote.voters.get(choiceIndex).add(userId);
+					}
+				}
+				else if (currentVote.voters.has(choiceIndex) && currentVote.voters.get(choiceIndex).has(userId)) {
+					currentVote.voters.get(choiceIndex).delete(userId);
+					if (currentVote.voters.get(choiceIndex).size === 0) {
+						currentVote.voters.delete(choiceIndex);
 					}
 				}
 				else {
-					if (currentVote.voters.has(choiceIndex) && currentVote.voters.get(choiceIndex).has(userId)) {
-						currentVote.voters.get(choiceIndex).delete(userId);
-						if (currentVote.voters.get(choiceIndex).size === 0) {
-							currentVote.voters.delete(choiceIndex);
-						}
+					if (!currentVote.voters.has(choiceIndex)) {
+						currentVote.voters.set(choiceIndex, new Set());
 					}
-					else {
-						if (!currentVote.voters.has(choiceIndex)) {
-							currentVote.voters.set(choiceIndex, new Set());
-						}
-						currentVote.voters.get(choiceIndex).add(userId);
-					}
+					currentVote.voters.get(choiceIndex).add(userId);
 				}
-				
+
 				const { embed, buttonRows } = updateVoteEmbed(interaction.message.embeds[0], currentVote);
 				await interaction.update({ embeds: [embed], components: buttonRows });
 				return;
@@ -259,6 +260,14 @@ module.exports = {
 		}
 
 		if (interaction.isModalSubmit()) {
+			if (await partyCreateCommand.handleModalSubmit?.(interaction)) {
+				return;
+			}
+
+			if (await reactionRoleCommand.handleModalSubmit?.(interaction)) {
+				return;
+			}
+
 			if (await giveawayCommand.handleModalSubmit?.(interaction)) {
 				return;
 			}
@@ -278,7 +287,7 @@ module.exports = {
 
 				const isCreator = interaction.user.id === vote.creatorId;
 				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
-				
+
 				if (!isCreator && !isAdmin) {
 					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 설정을 변경할 수 있습니다.', flags: MessageFlags.Ephemeral });
 					return;
@@ -307,7 +316,7 @@ module.exports = {
 				}, minutes * 60 * 1000);
 
 				await interaction.reply({ content: `종료 시간이 ${minutes}분으로 설정되었습니다.`, flags: MessageFlags.Ephemeral });
-				
+
 				// 메시지 업데이트
 				try {
 					const message = await interaction.channel.messages.fetch(messageId);
@@ -333,7 +342,7 @@ module.exports = {
 
 				const isCreator = interaction.user.id === vote.creatorId;
 				const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator) || false;
-				
+
 				if (!isCreator && !isAdmin) {
 					await interaction.reply({ content: '투표 생성자 또는 서버 관리자만 선택지를 추가할 수 있습니다.', flags: MessageFlags.Ephemeral });
 					return;
@@ -359,7 +368,7 @@ module.exports = {
 				vote.guild = interaction.guild;
 
 				await interaction.reply({ content: `선택지 "${newChoice}"가 추가되었습니다.`, flags: MessageFlags.Ephemeral });
-				
+
 				// 메시지 업데이트
 				try {
 					const message = await interaction.channel.messages.fetch(messageId);
@@ -401,6 +410,10 @@ module.exports = {
 			}
 
 			try {
+				if (command.guildOnly && await rejectNonGuildInteraction(interaction)) {
+					return;
+				}
+
 				await command.execute(interaction);
 			}
 			catch (error) {
@@ -416,4 +429,3 @@ module.exports = {
 		}
 	},
 };
-

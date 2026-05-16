@@ -1,7 +1,9 @@
 const { SlashCommandBuilder } = require('discord.js');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 
 module.exports = {
-	data: new SlashCommandBuilder().setName('서버').setDescription('서버 정보를 제공합니다.'),
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder().setName('서버').setDescription('서버 정보를 제공합니다.')),
 	async execute(interaction) {
 		// interaction.guild는 명령이 실행된 길드를 나타내는 객체입니다
 		const owner = await interaction.guild.fetchOwner();

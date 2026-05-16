@@ -1,8 +1,10 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
 const { loadLevelConfig, saveLevelConfig } = require('../../storage/levelStore');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 
 module.exports = {
-	data: new SlashCommandBuilder()
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('레벨설정')
 		.setDescription('레벨/XP 시스템 설정을 관리합니다. (관리자 전용)')
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -43,12 +45,12 @@ module.exports = {
 			subcommand
 				.setName('확인')
 				.setDescription('현재 레벨 시스템 설정을 확인합니다.'),
-		),
+		)),
 	async execute(interaction) {
 		if (!interaction.member?.permissions.has(PermissionFlagsBits.Administrator)) {
 			return interaction.reply({
 				content: '이 명령어는 서버 관리자만 사용할 수 있습니다.',
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -68,7 +70,7 @@ module.exports = {
 			if (seconds <= 0) {
 				return interaction.reply({
 					content: '쿨타임은 1초 이상이어야 합니다.',
-					ephemeral: true,
+					flags: MessageFlags.Ephemeral,
 				});
 			}
 
@@ -78,7 +80,7 @@ module.exports = {
 
 			return interaction.reply({
 				content: `XP 획득 쿨타임이 **${seconds}초**로 설정되었습니다.`,
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -92,7 +94,7 @@ module.exports = {
 				if (!channel.isTextBased()) {
 					return interaction.reply({
 						content: '텍스트 채널만 설정할 수 있습니다.',
-						ephemeral: true,
+						flags: MessageFlags.Ephemeral,
 					});
 				}
 				config.levelUpChannelId = channel.id;
@@ -105,7 +107,7 @@ module.exports = {
 				content: channel
 					? `레벨업 알림 채널이 ${channel} 로 설정되었습니다.`
 					: '레벨업 알림 채널이 초기화되었습니다. (레벨업이 발생한 채널에 알림이 전송됩니다.)',
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -117,7 +119,7 @@ module.exports = {
 
 			return interaction.reply({
 				content: `레벨업 알림이 **${enabled ? '활성화' : '비활성화'}**되었습니다.`,
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -149,9 +151,8 @@ module.exports = {
 				)
 				.setTimestamp();
 
-			return interaction.reply({ embeds: [embed], ephemeral: true });
+			return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 		}
 	},
 };
-
 

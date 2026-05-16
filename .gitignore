@@ -5,3 +5,6 @@ config.json
 src/.DS_Store
 data/*.json
 data/images/
+.cursor
+docs/prd.md
+tasks/

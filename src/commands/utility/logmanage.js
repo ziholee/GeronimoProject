@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags, AttachmentBuilder } = require('discord.js');
 const { deleteUserLogs, deleteGuildLogs, deleteLogsByType, getLogStats, getAllGuildLogs } = require('../../storage/logStore');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 
 const LOG_TYPE_NAMES = {
 	MESSAGE_SEND: '메시지 전송',
@@ -14,7 +15,8 @@ const LOG_TYPE_NAMES = {
 };
 
 module.exports = {
-	data: new SlashCommandBuilder()
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('로그관리')
 		.setDescription('로그를 관리합니다. (관리자 전용)')
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -89,7 +91,7 @@ module.exports = {
 							{ name: '음성 채널 퇴장', value: 'VOICE_LEAVE' },
 						),
 				),
-		),
+		)),
 	async execute(interaction) {
 		if (!interaction.member?.permissions.has(PermissionFlagsBits.Administrator)) {
 			return interaction.reply({
@@ -255,8 +257,15 @@ module.exports = {
 		}
 		catch (error) {
 			console.error('로그 관리 오류:', error);
+			const content = `❌ 로그 관리 중 오류가 발생했습니다: ${error.message}`;
+
+			if (interaction.deferred || interaction.replied) {
+				await interaction.editReply({ content });
+				return;
+			}
+
 			await interaction.reply({
-				content: `❌ 로그 관리 중 오류가 발생했습니다: ${error.message}`,
+				content,
 				flags: MessageFlags.Ephemeral,
 			});
 		}

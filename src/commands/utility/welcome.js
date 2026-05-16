@@ -1,5 +1,6 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
 const { loadWelcomeSettings, saveWelcomeSettings } = require('../../storage/welcomeStore');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 const path = require('path');
 const fs = require('fs');
 
@@ -22,7 +23,8 @@ function getImageFiles() {
 }
 
 module.exports = {
-	data: new SlashCommandBuilder()
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('환영메시지')
 		.setDescription('환영 메시지 설정을 관리합니다.')
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -74,12 +76,12 @@ module.exports = {
 			subcommand
 				.setName('초기화')
 				.setDescription('환영 메시지 설정을 초기화합니다.'),
-		),
+		)),
 	async execute(interaction) {
 		if (!interaction.member?.permissions.has(PermissionFlagsBits.Administrator)) {
 			return interaction.reply({
 				content: '이 명령어는 서버 관리자만 사용할 수 있습니다.',
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -88,12 +90,12 @@ module.exports = {
 
 		const subcommand = interaction.options.getSubcommand();
 		const guildId = interaction.guild.id;
-		let settings = client.welcomeSettings.get(guildId) || {};
+		const settings = client.welcomeSettings.get(guildId) || {};
 
 		if (subcommand === '채널설정') {
 			const channel = interaction.options.getChannel('채널');
 			if (!channel.isTextBased()) {
-				return interaction.reply({ content: '텍스트 채널만 선택할 수 있습니다.', ephemeral: true });
+				return interaction.reply({ content: '텍스트 채널만 선택할 수 있습니다.', flags: MessageFlags.Ephemeral });
 			}
 
 			settings.channelId = channel.id;
@@ -102,7 +104,7 @@ module.exports = {
 
 			await interaction.reply({
 				content: `환영 메시지 채널이 ${channel}로 설정되었습니다.`,
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		else if (subcommand === '배경설정') {
@@ -111,8 +113,8 @@ module.exports = {
 
 			if (!fs.existsSync(filePath)) {
 				return interaction.reply({
-					content: `이미지 파일을 찾을 수 없습니다.\n\`data/images\` 폴더에 이미지 파일을 넣어주세요.\n사용 가능한 파일 목록: \`/환영메시지 배경목록\``,
-					ephemeral: true,
+					content: '이미지 파일을 찾을 수 없습니다.\n`data/images` 폴더에 이미지 파일을 넣어주세요.\n사용 가능한 파일 목록: `/환영메시지 배경목록`',
+					flags: MessageFlags.Ephemeral,
 				});
 			}
 
@@ -120,7 +122,7 @@ module.exports = {
 			if (!['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
 				return interaction.reply({
 					content: '지원하는 이미지 형식이 아닙니다. (png, jpg, jpeg, gif, webp)',
-					ephemeral: true,
+					flags: MessageFlags.Ephemeral,
 				});
 			}
 
@@ -130,7 +132,7 @@ module.exports = {
 
 			await interaction.reply({
 				content: `배경 이미지가 \`${fileName}\`로 설정되었습니다. (권장 크기: 1024x400)`,
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		else if (subcommand === '배경목록') {
@@ -138,8 +140,8 @@ module.exports = {
 
 			if (imageFiles.length === 0) {
 				return interaction.reply({
-					content: '사용 가능한 배경 이미지가 없습니다.\n\`data/images\` 폴더에 이미지 파일을 넣어주세요.',
-					ephemeral: true,
+					content: '사용 가능한 배경 이미지가 없습니다.\n`data/images` 폴더에 이미지 파일을 넣어주세요.',
+					flags: MessageFlags.Ephemeral,
 				});
 			}
 
@@ -154,7 +156,7 @@ module.exports = {
 				})
 				.setFooter({ text: '배경 설정: /환영메시지 배경설정 이미지파일명: [파일명]' });
 
-			await interaction.reply({ embeds: [embed], ephemeral: true });
+			await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 		}
 		else if (subcommand === '메시지설정') {
 			const message = interaction.options.getString('메시지');
@@ -164,7 +166,7 @@ module.exports = {
 
 			await interaction.reply({
 				content: `환영 메시지가 설정되었습니다.\n설정된 메시지: ${message.replace(/{user}/g, interaction.user.toString())}`,
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 		else if (subcommand === '설정확인') {
@@ -194,7 +196,7 @@ module.exports = {
 				embed.addFields({ name: '환영 메시지', value: '기본 메시지 사용', inline: false });
 			}
 
-			await interaction.reply({ embeds: [embed], ephemeral: true });
+			await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 		}
 		else if (subcommand === '초기화') {
 			client.welcomeSettings.delete(guildId);
@@ -202,7 +204,7 @@ module.exports = {
 
 			await interaction.reply({
 				content: '환영 메시지 설정이 초기화되었습니다.',
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 	},
@@ -221,4 +223,3 @@ module.exports = {
 		}
 	},
 };
-

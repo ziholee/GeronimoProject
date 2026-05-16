@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 
 const GUIDE_SECTIONS = [
 	{
@@ -19,7 +20,7 @@ const GUIDE_SECTIONS = [
 	},
 	{
 		title: '커뮤니티',
-		names: ['투표', '게이브어웨이', '환영메시지', '파티생성'],
+		names: ['투표', '게이브어웨이', '환영메시지', '파티생성', '반응역할생성'],
 	},
 ];
 
@@ -53,29 +54,53 @@ function buildSectionValue(commands) {
 	return commands.map(formatCommandLine).join('\n\n');
 }
 
+function buildGuideFields(commands) {
+	const categorizedNames = new Set();
+	const fields = GUIDE_SECTIONS
+		.map(section => {
+			const sectionCommands = section.names
+				.map(name => commands.get(name))
+				.filter(Boolean);
+
+			for (const command of sectionCommands) {
+				categorizedNames.add(command.data.name);
+			}
+
+			if (sectionCommands.length === 0) {
+				return null;
+			}
+
+			return {
+				name: section.title,
+				value: buildSectionValue(sectionCommands),
+				inline: false,
+			};
+		})
+		.filter(Boolean);
+
+	const uncategorizedCommands = [...commands.values()]
+		.filter(command => !categorizedNames.has(command.data.name))
+		.sort((a, b) => a.data.name.localeCompare(b.data.name, 'ko'));
+
+	if (uncategorizedCommands.length > 0) {
+		fields.push({
+			name: '기타',
+			value: buildSectionValue(uncategorizedCommands),
+			inline: false,
+		});
+	}
+
+	return fields;
+}
+
 module.exports = {
-	data: new SlashCommandBuilder()
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('가이드')
-		.setDescription('현재 사용 가능한 봇 명령어 가이드를 제공합니다.'),
+		.setDescription('현재 사용 가능한 봇 명령어 가이드를 제공합니다.')),
 	async execute(interaction) {
 		const commands = interaction.client.commands;
-		const fields = GUIDE_SECTIONS
-			.map(section => {
-				const sectionCommands = section.names
-					.map(name => commands.get(name))
-					.filter(Boolean);
-
-				if (sectionCommands.length === 0) {
-					return null;
-				}
-
-				return {
-					name: section.title,
-					value: buildSectionValue(sectionCommands),
-					inline: false,
-				};
-			})
-			.filter(Boolean);
+		const fields = buildGuideFields(commands);
 
 		const guideEmbed = new EmbedBuilder()
 			.setColor(0x0099FF)
@@ -90,4 +115,5 @@ module.exports = {
 
 		await interaction.reply({ embeds: [guideEmbed] });
 	},
+	buildGuideFields,
 };

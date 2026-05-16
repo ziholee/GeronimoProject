@@ -1,18 +1,13 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { loadLevelData } = require('../../storage/levelStore');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 
 module.exports = {
-	data: new SlashCommandBuilder()
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('랭킹')
-		.setDescription('서버 내 레벨/XP 상위 10명의 랭킹을 확인합니다.'),
+		.setDescription('서버 내 레벨/XP 상위 10명의 랭킹을 확인합니다.')),
 	async execute(interaction) {
-		if (!interaction.guild) {
-			return interaction.reply({
-				content: '이 명령어는 서버에서만 사용할 수 있습니다.',
-				ephemeral: true,
-			});
-		}
-
 		const client = interaction.client;
 		// 서버 재시작 등으로 메모리가 비었을 수 있으니 파일에서 한 번 보정 로드
 		client.levelData = client.levelData || loadLevelData();
@@ -23,7 +18,7 @@ module.exports = {
 		if (!guildMap || guildMap.size === 0) {
 			return interaction.reply({
 				content: '아직 레벨 데이터가 없습니다.',
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -62,5 +57,3 @@ module.exports = {
 		await interaction.reply({ embeds: [embed] });
 	},
 };
-
-

@@ -1,8 +1,13 @@
 const {
+	ActionRowBuilder,
+	ModalBuilder,
 	SlashCommandBuilder,
 	MessageFlags,
 	PermissionFlagsBits,
+	TextInputBuilder,
+	TextInputStyle,
 } = require('discord.js');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 const {
 	PARTY_REACTION_EMOJI,
 	buildPartyEmbed,
@@ -26,160 +31,237 @@ function validateTimes(scheduledAt, recruitCloseAt) {
 	return null;
 }
 
-module.exports = {
-	data: new SlashCommandBuilder()
-		.setName('파티생성')
-		.setDescription('예약된 파티 모집 메시지를 생성합니다.')
-		.addStringOption(option =>
-			option
-				.setName('제목')
-				.setDescription('파티 제목')
-				.setRequired(true)
-				.setMaxLength(100),
-		)
-		.addStringOption(option =>
-			option
-				.setName('집합시간')
-				.setDescription('형식: YYYY-MM-DD HH:mm 또는 MM-DD HH:mm')
-				.setRequired(true),
-		)
-		.addStringOption(option =>
-			option
-				.setName('설명')
-				.setDescription('파티 설명')
-				.setRequired(false)
-				.setMaxLength(500),
-		)
-		.addStringOption(option =>
-			option
-				.setName('모집마감시간')
-				.setDescription('형식: YYYY-MM-DD HH:mm 또는 MM-DD HH:mm')
-				.setRequired(false),
-		)
-		.addIntegerOption(option =>
-			option
-				.setName('최대인원')
-				.setDescription('최대 모집 인원')
-				.setRequired(false)
-				.setMinValue(1)
-				.setMaxValue(99),
-		)
-		.addStringOption(option =>
-			option
-				.setName('채널이름')
-				.setDescription('생성될 음성채널 이름')
-				.setRequired(false)
-				.setMaxLength(100),
-		),
-	async execute(interaction) {
-		const title = interaction.options.getString('제목', true).trim();
-		const description = interaction.options.getString('설명')?.trim() || '';
-		const scheduledInput = interaction.options.getString('집합시간', true);
-		const recruitCloseInput = interaction.options.getString('모집마감시간');
-		const maxMembers = interaction.options.getInteger('최대인원');
-		const channelName = interaction.options.getString('채널이름');
+function parseModalSettings(input) {
+	const value = input.trim();
+	if (!value) {
+		return { maxMembers: null, channelName: null };
+	}
 
-		const scheduledAt = parseDateInput(scheduledInput);
-		const recruitCloseAt = recruitCloseInput ? parseDateInput(recruitCloseInput) : null;
+	const result = {
+		maxMembers: null,
+		channelName: null,
+	};
+	const tokens = value.split(',').map(token => token.trim()).filter(Boolean);
 
-		if (!scheduledAt) {
-			await interaction.reply({
-				content: '집합 시간 형식이 올바르지 않습니다. `YYYY-MM-DD HH:mm` 또는 `MM-DD HH:mm` 형식을 사용해주세요.',
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
+	for (const token of tokens) {
+		const maxMembersMatch = token.match(/^(?:최대\s*인원|인원|max|members?)?\s*[:=]?\s*(\d+)\s*명?$/i);
+		if (maxMembersMatch && result.maxMembers === null) {
+			const maxMembers = Number(maxMembersMatch[1]);
+			if (maxMembers < 1 || maxMembers > 99) {
+				return { error: '최대 인원은 1명 이상 99명 이하로 입력해주세요.' };
+			}
+			result.maxMembers = maxMembers;
+			continue;
 		}
 
-		if (recruitCloseInput && !recruitCloseAt) {
-			await interaction.reply({
-				content: '모집 마감 시간 형식이 올바르지 않습니다. `YYYY-MM-DD HH:mm` 또는 `MM-DD HH:mm` 형식을 사용해주세요.',
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
+		const channelNameMatch = token.match(/^(?:채널\s*이름|채널|channel|name)\s*[:=]\s*(.+)$/i);
+		const channelName = channelNameMatch ? channelNameMatch[1].trim() : token;
+		if (channelName && result.channelName === null) {
+			result.channelName = channelName;
 		}
+	}
 
-		const timeError = validateTimes(scheduledAt, recruitCloseAt);
-		if (timeError) {
-			await interaction.reply({
-				content: timeError,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
+	return result;
+}
 
-		const botMember = interaction.guild.members.me;
-		const requiredGuildPermissions = [
-			PermissionFlagsBits.ManageChannels,
-			PermissionFlagsBits.CreateInstantInvite,
-		];
-		const requiredChannelPermissions = [
-			PermissionFlagsBits.ViewChannel,
-			PermissionFlagsBits.SendMessages,
-			PermissionFlagsBits.EmbedLinks,
-			PermissionFlagsBits.AddReactions,
-			PermissionFlagsBits.ReadMessageHistory,
-		];
+async function createPartyFromInput(interaction, values) {
+	const title = values.title.trim();
+	const description = values.description.trim();
+	const scheduledInput = values.scheduledInput.trim();
+	const recruitCloseInput = values.recruitCloseInput.trim();
+	const settings = parseModalSettings(values.settingsInput);
 
-		if (!botMember.permissions.has(requiredGuildPermissions)) {
-			await interaction.reply({
-				content: '파티 기능을 사용하려면 봇에 `채널 관리`와 `초대 링크 만들기` 권한이 필요합니다.',
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
-
-		if (!interaction.channel.permissionsFor(botMember).has(requiredChannelPermissions)) {
-			await interaction.reply({
-				content: '현재 채널에서 파티 모집 메시지를 만들 권한이 부족합니다. `메시지 보내기`, `임베드 링크`, `반응 추가`, `메시지 기록 읽기` 권한을 확인해주세요.',
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
-
-		const party = createParty({
-			guildId: interaction.guild.id,
-			channelId: interaction.channel.id,
-			hostUserId: interaction.user.id,
-			title,
-			description,
-			scheduledAt,
-			recruitCloseAt,
-			maxMembers,
-			voiceChannelName: channelName,
-			parentChannelId: interaction.channel.parentId,
-		});
-
-		let recruitMessage;
-
-		try {
-			recruitMessage = await interaction.channel.send({
-				embeds: [buildPartyEmbed(party)],
-			});
-
-			party.messageId = recruitMessage.id;
-			const parties = interaction.client.partyData || new Map();
-			parties.set(party.partyId, party);
-			interaction.client.partyData = parties;
-			persistParties(interaction.client);
-
-			await recruitMessage.react(PARTY_REACTION_EMOJI);
-		}
-		catch (error) {
-			console.error(`파티 모집 메시지 생성 실패 (${party.partyId}):`, error);
-			await interaction.reply({
-				content: '파티 모집 메시지를 생성하는 중 오류가 발생했습니다. 봇 권한과 채널 설정을 확인해주세요.',
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
-
+	if (settings.error) {
 		await interaction.reply({
-			content: [
-				'파티 모집 메시지를 생성했습니다.',
-				`집합 시간: ${formatDiscordTimestamp(scheduledAt)}`,
-				`모집 메시지: ${recruitMessage.url}`,
-			].join('\n'),
+			content: settings.error,
 			flags: MessageFlags.Ephemeral,
 		});
+		return;
+	}
+
+	const scheduledAt = parseDateInput(scheduledInput);
+	const recruitCloseAt = recruitCloseInput ? parseDateInput(recruitCloseInput) : null;
+
+	if (!scheduledAt) {
+		await interaction.reply({
+			content: '집합 시간 형식이 올바르지 않습니다. `YYYY-MM-DD HH:mm` 또는 `MM-DD HH:mm` 형식을 사용해주세요.',
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	if (recruitCloseInput && !recruitCloseAt) {
+		await interaction.reply({
+			content: '모집 마감 시간 형식이 올바르지 않습니다. `YYYY-MM-DD HH:mm` 또는 `MM-DD HH:mm` 형식을 사용해주세요.',
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	const timeError = validateTimes(scheduledAt, recruitCloseAt);
+	if (timeError) {
+		await interaction.reply({
+			content: timeError,
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	const botMember = interaction.guild.members.me;
+	const requiredGuildPermissions = [
+		PermissionFlagsBits.ManageChannels,
+		PermissionFlagsBits.CreateInstantInvite,
+	];
+	const requiredChannelPermissions = [
+		PermissionFlagsBits.ViewChannel,
+		PermissionFlagsBits.SendMessages,
+		PermissionFlagsBits.EmbedLinks,
+		PermissionFlagsBits.AddReactions,
+		PermissionFlagsBits.ReadMessageHistory,
+	];
+
+	if (!botMember.permissions.has(requiredGuildPermissions)) {
+		await interaction.reply({
+			content: '파티 기능을 사용하려면 봇에 `채널 관리`와 `초대 링크 만들기` 권한이 필요합니다.',
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	if (!interaction.channel.permissionsFor(botMember).has(requiredChannelPermissions)) {
+		await interaction.reply({
+			content: '현재 채널에서 파티 모집 메시지를 만들 권한이 부족합니다. `메시지 보내기`, `임베드 링크`, `반응 추가`, `메시지 기록 읽기` 권한을 확인해주세요.',
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	const party = createParty({
+		guildId: interaction.guild.id,
+		channelId: interaction.channel.id,
+		hostUserId: interaction.user.id,
+		title,
+		description,
+		scheduledAt,
+		recruitCloseAt,
+		maxMembers: settings.maxMembers,
+		voiceChannelName: settings.channelName,
+		parentChannelId: interaction.channel.parentId,
+	});
+
+	let recruitMessage;
+
+	try {
+		recruitMessage = await interaction.channel.send({
+			embeds: [buildPartyEmbed(party)],
+		});
+
+		party.messageId = recruitMessage.id;
+		const parties = interaction.client.partyData || new Map();
+		parties.set(party.partyId, party);
+		interaction.client.partyData = parties;
+		persistParties(interaction.client);
+
+		await recruitMessage.react(PARTY_REACTION_EMOJI);
+	}
+	catch (error) {
+		console.error(`파티 모집 메시지 생성 실패 (${party.partyId}):`, error);
+		await interaction.reply({
+			content: '파티 모집 메시지를 생성하는 중 오류가 발생했습니다. 봇 권한과 채널 설정을 확인해주세요.',
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	await interaction.reply({
+		content: [
+			'파티 모집 메시지를 생성했습니다.',
+			`집합 시간: ${formatDiscordTimestamp(scheduledAt)}`,
+			`모집 메시지: ${recruitMessage.url}`,
+		].join('\n'),
+		flags: MessageFlags.Ephemeral,
+	});
+}
+
+module.exports = {
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
+		.setName('파티생성')
+		.setDescription('모달로 예약된 파티 모집 메시지를 생성합니다.')),
+	async execute(interaction) {
+		const modal = new ModalBuilder()
+			.setCustomId(`party_create:${interaction.user.id}`)
+			.setTitle('파티 생성');
+
+		const titleInput = new TextInputBuilder()
+			.setCustomId('title')
+			.setLabel('제목')
+			.setStyle(TextInputStyle.Short)
+			.setRequired(true)
+			.setMaxLength(100);
+
+		const scheduledInput = new TextInputBuilder()
+			.setCustomId('scheduled_at')
+			.setLabel('집합 시간')
+			.setStyle(TextInputStyle.Short)
+			.setPlaceholder('YYYY-MM-DD HH:mm 또는 MM-DD HH:mm')
+			.setRequired(true)
+			.setMaxLength(20);
+
+		const descriptionInput = new TextInputBuilder()
+			.setCustomId('description')
+			.setLabel('설명')
+			.setStyle(TextInputStyle.Paragraph)
+			.setRequired(false)
+			.setMaxLength(500);
+
+		const recruitCloseInput = new TextInputBuilder()
+			.setCustomId('recruit_close_at')
+			.setLabel('모집 마감 시간')
+			.setStyle(TextInputStyle.Short)
+			.setPlaceholder('비워두면 집합 시간까지')
+			.setRequired(false)
+			.setMaxLength(20);
+
+		const settingsInput = new TextInputBuilder()
+			.setCustomId('settings')
+			.setLabel('최대 인원, 채널 이름')
+			.setStyle(TextInputStyle.Short)
+			.setPlaceholder('예: 5, 발로란트 내전')
+			.setRequired(false)
+			.setMaxLength(120);
+
+		modal.addComponents(
+			new ActionRowBuilder().addComponents(titleInput),
+			new ActionRowBuilder().addComponents(scheduledInput),
+			new ActionRowBuilder().addComponents(descriptionInput),
+			new ActionRowBuilder().addComponents(recruitCloseInput),
+			new ActionRowBuilder().addComponents(settingsInput),
+		);
+
+		await interaction.showModal(modal);
+	},
+	async handleModalSubmit(interaction) {
+		if (!interaction.customId.startsWith('party_create:')) {
+			return false;
+		}
+
+		const [, userId] = interaction.customId.split(':');
+		if (userId !== interaction.user.id) {
+			await interaction.reply({
+				content: '이 파티 생성 모달은 실행한 사용자만 제출할 수 있습니다.',
+				flags: MessageFlags.Ephemeral,
+			});
+			return true;
+		}
+
+		await createPartyFromInput(interaction, {
+			title: interaction.fields.getTextInputValue('title'),
+			scheduledInput: interaction.fields.getTextInputValue('scheduled_at'),
+			description: interaction.fields.getTextInputValue('description') || '',
+			recruitCloseInput: interaction.fields.getTextInputValue('recruit_close_at') || '',
+			settingsInput: interaction.fields.getTextInputValue('settings') || '',
+		});
+		return true;
 	},
 };

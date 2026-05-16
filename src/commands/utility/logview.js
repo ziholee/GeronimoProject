@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
 const { getUserLogs, getAllGuildLogs } = require('../../storage/logStore');
+const { guildOnlyCommand } = require('../../utils/commandContext');
 
 const LOG_TYPE_NAMES = {
 	MESSAGE_SEND: '메시지 전송',
@@ -13,7 +14,7 @@ const LOG_TYPE_NAMES = {
 	VOICE_LEAVE: '음성 채널 퇴장',
 };
 
-function formatLogEntry(log, userId) {
+function formatLogEntry(log) {
 	const date = new Date(log.timestamp);
 	const dateStr = date.toLocaleString('ko-KR');
 	let description = `**타입:** ${LOG_TYPE_NAMES[log.type] || log.type}\n**시간:** ${dateStr}\n`;
@@ -53,7 +54,8 @@ function formatLogEntry(log, userId) {
 }
 
 module.exports = {
-	data: new SlashCommandBuilder()
+	guildOnly: true,
+	data: guildOnlyCommand(new SlashCommandBuilder()
 		.setName('로그조회')
 		.setDescription('사용자 활동 로그를 조회합니다. (관리자 전용)')
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -122,7 +124,7 @@ module.exports = {
 						.setMinValue(1)
 						.setMaxValue(100),
 				),
-		),
+		)),
 	async execute(interaction) {
 		if (!interaction.member?.permissions.has(PermissionFlagsBits.Administrator)) {
 			return interaction.reply({
@@ -160,7 +162,7 @@ module.exports = {
 
 				const fields = logs.slice(0, 10).map((log, index) => ({
 					name: `#${logs.length - index}`,
-					value: formatLogEntry(log, targetUser.id),
+					value: formatLogEntry(log),
 					inline: false,
 				}));
 
@@ -190,7 +192,7 @@ module.exports = {
 
 				const embed = new EmbedBuilder()
 					.setColor(0x5865f2)
-					.setTitle(`📋 서버 활동 로그`)
+					.setTitle('📋 서버 활동 로그')
 					.setFooter({ text: `총 ${logs.length}개의 로그` })
 					.setTimestamp();
 

@@ -5,6 +5,44 @@ const fs = require('fs');
 const { loadWelcomeSettings } = require('../storage/welcomeStore');
 const { addLog } = require('../storage/logStore');
 
+const WELCOME_FONT_FAMILY = 'WelcomeKorean';
+const SYSTEM_FONT_FALLBACKS = [
+	process.env.WELCOME_FONT_PATH,
+	'/System/Library/Fonts/AppleSDGothicNeo.ttc',
+	'/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
+	'/Library/Fonts/NanumGothic.ttf',
+	'/usr/share/fonts/truetype/nanum/NanumGothic.ttf',
+	'/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+	'/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+	'C:\\Windows\\Fonts\\malgun.ttf',
+].filter(Boolean);
+
+let welcomeFontRegistered = false;
+
+function getWelcomeFontFamily() {
+	if (welcomeFontRegistered) {
+		return WELCOME_FONT_FAMILY;
+	}
+
+	for (const fontPath of SYSTEM_FONT_FALLBACKS) {
+		if (!fs.existsSync(fontPath)) {
+			continue;
+		}
+
+		try {
+			registerFont(fontPath, { family: WELCOME_FONT_FAMILY });
+			welcomeFontRegistered = true;
+			return WELCOME_FONT_FAMILY;
+		}
+		catch (error) {
+			console.warn(`환영 이미지 폰트 등록 실패 (${fontPath}):`, error.message);
+		}
+	}
+
+	console.warn('환영 이미지용 한글 폰트를 찾지 못했습니다. 시스템 기본 폰트로 렌더링합니다.');
+	return '"Apple SD Gothic Neo", "Noto Sans CJK KR", "NanumGothic", Arial, sans-serif';
+}
+
 module.exports = {
 	name: Events.GuildMemberAdd,
 	async execute(member) {
@@ -37,7 +75,7 @@ module.exports = {
 			const ctx = canvas.getContext('2d');
 
 			let backgroundImage = null;
-			const backgroundPath = settings.backgroundPath 
+			const backgroundPath = settings.backgroundPath
 				? path.resolve(__dirname, '../../data/images', settings.backgroundPath)
 				: null;
 
@@ -81,12 +119,13 @@ module.exports = {
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'middle';
 
+			const fontFamily = getWelcomeFontFamily();
 			const fontSize = 48;
-			ctx.font = `bold ${fontSize}px Arial`;
+			ctx.font = `bold ${fontSize}px ${fontFamily}`;
 			ctx.fillText(`환영합니다, ${member.user.username}!`, centerX, centerY + 120);
 
 			const subFontSize = 32;
-			ctx.font = `${subFontSize}px Arial`;
+			ctx.font = `${subFontSize}px ${fontFamily}`;
 			ctx.fillText(`${guild.name}에 오신 것을 환영합니다!`, centerX, centerY + 170);
 
 			const buffer = canvas.toBuffer('image/png');
@@ -105,4 +144,3 @@ module.exports = {
 		}
 	},
 };
-

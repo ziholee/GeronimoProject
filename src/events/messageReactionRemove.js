@@ -5,6 +5,7 @@ const {
 	refreshPartyMessage,
 	removePartyMember,
 } = require('../services/partyService');
+const { handleReactionRoleRemove } = require('../services/reactionRoleService');
 
 module.exports = {
 	name: Events.MessageReactionRemove,
@@ -13,23 +14,34 @@ module.exports = {
 			return;
 		}
 
+		let currentReaction = reaction;
 		if (reaction.partial) {
-			await reaction.fetch().catch(() => null);
+			currentReaction = await reaction.fetch().catch(() => null);
+			if (!currentReaction) {
+				return;
+			}
 		}
 
-		if (!reaction.message?.guildId || reaction.emoji.name !== PARTY_REACTION_EMOJI) {
+		if (!currentReaction.message?.guildId) {
 			return;
 		}
 
-		const party = getPartyByMessageId(reaction.client, reaction.message.id);
-		if (!party || party.hostUserId === user.id) {
-			return;
+		if (currentReaction.emoji.name === PARTY_REACTION_EMOJI) {
+			const party = getPartyByMessageId(currentReaction.client, currentReaction.message.id);
+			if (party) {
+				if (party.hostUserId === user.id) {
+					return;
+				}
+
+				if (!removePartyMember(currentReaction.client, party, user.id)) {
+					return;
+				}
+
+				await refreshPartyMessage(currentReaction.client, party);
+				return;
+			}
 		}
 
-		if (!removePartyMember(reaction.client, party, user.id)) {
-			return;
-		}
-
-		await refreshPartyMessage(reaction.client, party);
+		await handleReactionRoleRemove(currentReaction, user);
 	},
 };

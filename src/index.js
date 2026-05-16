@@ -7,6 +7,7 @@ const { loadVoiceMasterChannels } = require('./storage/voiceMasterStore');
 const { loadWelcomeSettings } = require('./storage/welcomeStore');
 const { loadLevelData, loadLevelConfig } = require('./storage/levelStore');
 const { loadParties } = require('./storage/partyStore');
+const { loadReactionRoles } = require('./storage/reactionRoleStore');
 
 // 새로운 클라이언트 인스턴스를 생성합니다
 const client = new Client({
@@ -76,6 +77,7 @@ client.welcomeSettings = loadWelcomeSettings();
 client.levelData = loadLevelData();
 client.levelConfig = loadLevelConfig();
 client.partyData = loadParties();
+client.reactionRoleData = loadReactionRoles();
 
 // 클라이언트의 토큰으로 Discord에 로그인합니다
 client.login(token);
