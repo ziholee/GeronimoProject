@@ -3,6 +3,7 @@ const {
 	ButtonBuilder,
 	ButtonStyle,
 	ChannelType,
+	EmbedBuilder,
 	MessageFlags,
 	ModalBuilder,
 	PermissionFlagsBits,
@@ -27,6 +28,8 @@ const SERVER_EMOJI_SELECT_PREFIX = 'reaction_role_server_emoji';
 const COMMON_EMOJI_SELECT_PREFIX = 'reaction_role_common_emoji';
 const ADDITIONAL_ROLE_SELECT_PREFIX = 'reaction_role_additional_roles';
 const MANUAL_EMOJI_BUTTON_PREFIX = 'reaction_role_manual_emoji';
+const DETAILS_BUTTON_PREFIX = 'reaction_role_details';
+const EMOJI_MODAL_PREFIX = 'reaction_role_assign_emoji';
 const SETUP_TTL_MS = 15 * 60 * 1000;
 const MAX_REACTION_ROLE_COUNT = 10;
 
@@ -245,28 +248,95 @@ function getSetupRoleIds(setup) {
 		.slice(0, MAX_REACTION_ROLE_COUNT);
 }
 
-function formatSetupRoleMentions(setup) {
-	return getSetupRoleIds(setup).map(roleId => `<@&${roleId}>`).join(', ');
+function getSetupEmojiMap(setup) {
+	if (!setup.emojiByRoleId) {
+		setup.emojiByRoleId = {};
+	}
+	return setup.emojiByRoleId;
 }
 
-function buildSetupSummary(interaction, setup) {
-	const selectedRoleCount = getSetupRoleIds(setup).length;
-	return [
-		'반응 역할에 사용할 추가 역할과 이모지를 선택해주세요.',
-		`채널: <#${setup.channelId}>`,
-		`역할: ${formatSetupRoleMentions(setup)} (${selectedRoleCount}개)`,
-		`모드: ${setup.mode}${setup.groupName ? ` (${setup.groupName})` : ''}`,
-		'추가 역할은 선택 사항입니다. 기본 역할만 사용할 수도 있습니다.',
-	].join('\n');
+function getCurrentEmojiTargetRoleId(setup) {
+	const emojiByRoleId = getSetupEmojiMap(setup);
+	return getSetupRoleIds(setup).find(roleId => !emojiByRoleId[roleId]) || null;
+}
+
+function getRoleEmojiItems(setup) {
+	const emojiByRoleId = getSetupEmojiMap(setup);
+	return getSetupRoleIds(setup)
+		.map(roleId => ({
+			roleId,
+			emojiInput: emojiByRoleId[roleId] || null,
+		}));
+}
+
+function hasAllRoleEmojis(setup) {
+	const items = getRoleEmojiItems(setup);
+	return items.length > 0 && items.every(item => item.emojiInput);
+}
+
+function getEmojiKey(emojiConfig) {
+	return emojiConfig.emojiId ? `id:${emojiConfig.emojiId}` : `name:${emojiConfig.emoji}`;
+}
+
+function assignEmojiToCurrentRole(setup, emojiInput) {
+	const targetRoleId = getCurrentEmojiTargetRoleId(setup);
+	if (!targetRoleId) {
+		return { error: '모든 역할에 이미 이모지가 배정되었습니다.' };
+	}
+
+	const emojiConfig = parseEmojiInput(emojiInput);
+	if (!emojiConfig) {
+		return { error: '이모지를 입력해주세요. 일반 이모지 또는 `<:name:id>` 형식을 사용할 수 있습니다.' };
+	}
+
+	const emojiKey = getEmojiKey(emojiConfig);
+	for (const item of getRoleEmojiItems(setup)) {
+		if (!item.emojiInput || item.roleId === targetRoleId) {
+			continue;
+		}
+
+		const existingEmojiConfig = parseEmojiInput(item.emojiInput);
+		if (existingEmojiConfig && getEmojiKey(existingEmojiConfig) === emojiKey) {
+			return { error: '이미 다른 역할에 배정된 이모지입니다. 역할마다 다른 이모지를 선택해주세요.' };
+		}
+	}
+
+	getSetupEmojiMap(setup)[targetRoleId] = emojiInput;
+	return { roleId: targetRoleId, emojiConfig };
+}
+
+function buildSetupEmbed(setup) {
+	const roleItems = getRoleEmojiItems(setup);
+	const currentRoleId = getCurrentEmojiTargetRoleId(setup);
+	const roleLines = roleItems.map(item => `${item.emojiInput || '미지정'} <@&${item.roleId}>`);
+
+	return new EmbedBuilder()
+		.setTitle('반응 역할 설정')
+		.setDescription([
+			'역할마다 사용할 이모지를 하나씩 배정합니다.',
+			'추가 역할을 선택한 뒤, 현재 대상 역할에 사용할 이모지를 선택해주세요.',
+		].join('\n'))
+		.setColor(0x5865F2)
+		.addFields(
+			{ name: '대상 채널', value: `<#${setup.channelId}>`, inline: true },
+			{ name: '모드', value: `${setup.mode}${setup.groupName ? ` (${setup.groupName})` : ''}`, inline: true },
+			{ name: '역할별 이모지', value: roleLines.join('\n') || '선택된 역할이 없습니다.', inline: false },
+			{
+				name: '현재 이모지를 배정할 역할',
+				value: currentRoleId ? `<@&${currentRoleId}>` : '모든 역할에 이모지가 배정되었습니다.',
+				inline: false,
+			},
+		);
 }
 
 function buildEmojiSetupComponents(interaction, setup) {
 	const rows = [];
 	const setupId = setup.id;
 	const additionalRoleIds = setup.additionalRoleIds || [];
+	const currentRoleId = getCurrentEmojiTargetRoleId(setup);
 	const additionalRoleSelect = new RoleSelectMenuBuilder()
 		.setCustomId(`${ADDITIONAL_ROLE_SELECT_PREFIX}:${setupId}`)
-		.setPlaceholder('추가로 함께 부여/제거할 역할 선택')
+		.setPlaceholder('역할 선택지 추가/변경')
 		.setMinValues(0)
 		.setMaxValues(MAX_REACTION_ROLE_COUNT - 1);
 
@@ -277,6 +347,16 @@ function buildEmojiSetupComponents(interaction, setup) {
 	rows.push(new ActionRowBuilder().addComponents(
 		additionalRoleSelect,
 	));
+
+	if (!currentRoleId) {
+		rows.push(new ActionRowBuilder().addComponents(
+			new ButtonBuilder()
+				.setCustomId(`${DETAILS_BUTTON_PREFIX}:${setupId}`)
+				.setLabel('제목/설명 입력')
+				.setStyle(ButtonStyle.Primary),
+		));
+		return rows;
+	}
 
 	const guildEmojis = [...interaction.guild.emojis.cache.values()]
 		.sort((a, b) => a.name.localeCompare(b.name, 'ko'))
@@ -316,9 +396,9 @@ function buildEmojiSetupComponents(interaction, setup) {
 	return rows;
 }
 
-function buildDetailsModal(setupId, includeEmojiInput) {
+function buildDetailsModal(setupId) {
 	const modal = new ModalBuilder()
-		.setCustomId(`${MODAL_PREFIX}:${setupId}:${includeEmojiInput ? 'manual' : 'selected'}`)
+		.setCustomId(`${MODAL_PREFIX}:${setupId}`)
 		.setTitle('반응 역할 생성');
 
 	const titleInput = new TextInputBuilder()
@@ -342,18 +422,23 @@ function buildDetailsModal(setupId, includeEmojiInput) {
 		new ActionRowBuilder().addComponents(descriptionInput),
 	);
 
-	if (includeEmojiInput) {
-		const emojiInput = new TextInputBuilder()
-			.setCustomId('emoji')
-			.setLabel('이모지')
-			.setStyle(TextInputStyle.Short)
-			.setPlaceholder('예: 🎮 또는 <:name:id>')
-			.setRequired(true)
-			.setMaxLength(100);
+	return modal;
+}
 
-		modal.addComponents(new ActionRowBuilder().addComponents(emojiInput));
-	}
+function buildEmojiInputModal(setupId) {
+	const modal = new ModalBuilder()
+		.setCustomId(`${EMOJI_MODAL_PREFIX}:${setupId}`)
+		.setTitle('역할 이모지 입력');
 
+	const emojiInput = new TextInputBuilder()
+		.setCustomId('emoji')
+		.setLabel('현재 역할에 배정할 이모지')
+		.setStyle(TextInputStyle.Short)
+		.setPlaceholder('예: 🎮 또는 <:name:id>')
+		.setRequired(true)
+		.setMaxLength(100);
+
+	modal.addComponents(new ActionRowBuilder().addComponents(emojiInput));
 	return modal;
 }
 
@@ -368,12 +453,12 @@ async function createReactionRoleFromInput(interaction, values) {
 
 	const title = values.title.trim();
 	const description = values.description.trim();
-	const emojiConfig = parseEmojiInput(values.emojiInput);
 	const modeConfig = parseModeInput(values.modeInput, title);
+	const rawItems = values.items || [];
 
-	if (!emojiConfig) {
+	if (rawItems.length === 0) {
 		await interaction.reply({
-			content: '이모지를 입력해주세요. 일반 이모지 또는 `<:name:id>` 형식을 사용할 수 있습니다.',
+			content: '역할별 이모지를 1개 이상 배정해주세요.',
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
@@ -382,6 +467,18 @@ async function createReactionRoleFromInput(interaction, values) {
 	if (modeConfig.error) {
 		await interaction.reply({
 			content: modeConfig.error,
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	const parsedItems = rawItems.map(item => {
+		const emojiConfig = parseEmojiInput(item.emojiInput || '');
+		return emojiConfig ? { roleId: item.roleId, ...emojiConfig } : null;
+	});
+	if (parsedItems.some(item => !item?.emoji)) {
+		await interaction.reply({
+			content: '이모지를 입력해주세요. 일반 이모지 또는 `<:name:id>` 형식을 사용할 수 있습니다.',
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
@@ -397,7 +494,7 @@ async function createReactionRoleFromInput(interaction, values) {
 		return;
 	}
 
-	const roleInputs = values.roleInputs || [values.roleInput];
+	const roleInputs = parsedItems.map(item => item.roleId);
 	const roleResult = await resolveRoles(interaction, roleInputs);
 	if (roleResult.error) {
 		await interaction.editReply({
@@ -409,6 +506,15 @@ async function createReactionRoleFromInput(interaction, values) {
 	const { roles, botMember } = roleResult;
 	const [primaryRole] = roles;
 	const roleIds = roles.map(role => role.id);
+	const validRoleIds = new Set(roleIds);
+	const items = parsedItems
+		.filter(item => validRoleIds.has(item.roleId))
+		.map(item => ({
+			roleId: item.roleId,
+			emoji: item.emoji,
+			emojiId: item.emojiId,
+			emojiName: item.emojiName,
+		}));
 	const { channel: targetChannel } = targetChannelResult;
 	const requiredChannelPermissions = [
 		PermissionFlagsBits.ViewChannel,
@@ -422,7 +528,7 @@ async function createReactionRoleFromInput(interaction, values) {
 		requiredChannelPermissions.push(PermissionFlagsBits.ManageMessages);
 	}
 
-	const usesExternalEmoji = emojiConfig.emojiId && !interaction.guild.emojis.cache.has(emojiConfig.emojiId);
+	const usesExternalEmoji = items.some(item => item.emojiId && !interaction.guild.emojis.cache.has(item.emojiId));
 	if (usesExternalEmoji) {
 		requiredChannelPermissions.push(PermissionFlagsBits.UseExternalEmojis);
 	}
@@ -441,11 +547,12 @@ async function createReactionRoleFromInput(interaction, values) {
 		guildId: interaction.guild.id,
 		channelId: targetChannel.id,
 		messageId: '0',
-		emoji: emojiConfig.emoji,
-		emojiId: emojiConfig.emojiId,
-		emojiName: emojiConfig.emojiName,
+		emoji: items[0].emoji,
+		emojiId: items[0].emojiId,
+		emojiName: items[0].emojiName,
 		roleId: primaryRole.id,
 		roleIds,
+		items,
 		title,
 		description,
 		mode: modeConfig.mode,
@@ -460,12 +567,14 @@ async function createReactionRoleFromInput(interaction, values) {
 			embeds: [buildReactionRoleEmbed(pendingConfig)],
 		});
 
-		const config = addReactionRole(interaction.client, {
+		for (const item of pendingConfig.items) {
+			await reactionRoleMessage.react(item.emoji);
+		}
+
+		addReactionRole(interaction.client, {
 			...pendingConfig,
 			messageId: reactionRoleMessage.id,
 		});
-
-		await reactionRoleMessage.react(config.emoji);
 	}
 	catch (error) {
 		console.error('반응 역할 메시지 생성 실패:', error);
@@ -483,7 +592,7 @@ async function createReactionRoleFromInput(interaction, values) {
 		content: [
 			'반응 역할 메시지를 생성했습니다.',
 			`채널: ${targetChannel}`,
-			`역할: ${roleIds.map(roleId => `<@&${roleId}>`).join(', ')}`,
+			`역할: ${items.map(item => `${item.emoji} <@&${item.roleId}>`).join(', ')}`,
 			`모드: ${modeConfig.mode}${modeConfig.groupName ? ` (${modeConfig.groupName})` : ''}`,
 			`메시지: ${reactionRoleMessage.url}`,
 		].join('\n'),
@@ -547,6 +656,7 @@ module.exports = {
 			channelId: targetChannel.id,
 			roleId: role.id,
 			additionalRoleIds: [],
+			emojiByRoleId: {},
 			mode,
 			groupName,
 			createdAt: Date.now(),
@@ -555,7 +665,7 @@ module.exports = {
 		saveSetup(interaction, setup);
 
 		await interaction.reply({
-			content: buildSetupSummary(interaction, setup),
+			embeds: [buildSetupEmbed(setup)],
 			components: buildEmojiSetupComponents(interaction, setup),
 			flags: MessageFlags.Ephemeral,
 		});
@@ -566,8 +676,9 @@ module.exports = {
 		const isCommonEmojiSelect = customId.startsWith(`${COMMON_EMOJI_SELECT_PREFIX}:`);
 		const isAdditionalRoleSelect = customId.startsWith(`${ADDITIONAL_ROLE_SELECT_PREFIX}:`);
 		const isManualEmojiButton = customId.startsWith(`${MANUAL_EMOJI_BUTTON_PREFIX}:`);
+		const isDetailsButton = customId.startsWith(`${DETAILS_BUTTON_PREFIX}:`);
 
-		if (!isServerEmojiSelect && !isCommonEmojiSelect && !isAdditionalRoleSelect && !isManualEmojiButton) {
+		if (!isServerEmojiSelect && !isCommonEmojiSelect && !isAdditionalRoleSelect && !isManualEmojiButton && !isDetailsButton) {
 			return false;
 		}
 
@@ -593,15 +704,34 @@ module.exports = {
 			setup.additionalRoleIds = [...new Set(interaction.values)]
 				.filter(roleId => roleId !== setup.roleId)
 				.slice(0, MAX_REACTION_ROLE_COUNT - 1);
+			const roleIds = new Set(getSetupRoleIds(setup));
+			for (const roleId of Object.keys(getSetupEmojiMap(setup))) {
+				if (!roleIds.has(roleId)) {
+					delete setup.emojiByRoleId[roleId];
+				}
+			}
 			await interaction.update({
-				content: buildSetupSummary(interaction, setup),
+				embeds: [buildSetupEmbed(setup)],
 				components: buildEmojiSetupComponents(interaction, setup),
 			});
 			return true;
 		}
 
+		if (isDetailsButton) {
+			if (!hasAllRoleEmojis(setup)) {
+				await interaction.reply({
+					content: '모든 역할에 이모지를 먼저 배정해주세요.',
+					flags: MessageFlags.Ephemeral,
+				});
+				return true;
+			}
+
+			await interaction.showModal(buildDetailsModal(setupId));
+			return true;
+		}
+
 		if (isManualEmojiButton) {
-			await interaction.showModal(buildDetailsModal(setupId, true));
+			await interaction.showModal(buildEmojiInputModal(setupId));
 			return true;
 		}
 
@@ -615,21 +745,40 @@ module.exports = {
 				});
 				return true;
 			}
-			setup.emojiInput = `<${emoji.animated ? 'a' : ''}:${emoji.name}:${emoji.id}>`;
+			const assigned = assignEmojiToCurrentRole(setup, `<${emoji.animated ? 'a' : ''}:${emoji.name}:${emoji.id}>`);
+			if (assigned.error) {
+				await interaction.reply({
+					content: assigned.error,
+					flags: MessageFlags.Ephemeral,
+				});
+				return true;
+			}
 		}
 		else {
-			setup.emojiInput = interaction.values[0];
+			const assigned = assignEmojiToCurrentRole(setup, interaction.values[0]);
+			if (assigned.error) {
+				await interaction.reply({
+					content: assigned.error,
+					flags: MessageFlags.Ephemeral,
+				});
+				return true;
+			}
 		}
 
-		await interaction.showModal(buildDetailsModal(setupId, false));
+		await interaction.update({
+			embeds: [buildSetupEmbed(setup)],
+			components: buildEmojiSetupComponents(interaction, setup),
+		});
 		return true;
 	},
 	async handleModalSubmit(interaction) {
-		if (!interaction.customId.startsWith(`${MODAL_PREFIX}:`)) {
+		const isDetailsModal = interaction.customId.startsWith(`${MODAL_PREFIX}:`);
+		const isEmojiModal = interaction.customId.startsWith(`${EMOJI_MODAL_PREFIX}:`);
+		if (!isDetailsModal && !isEmojiModal) {
 			return false;
 		}
 
-		const [, setupId, emojiSource] = interaction.customId.split(':');
+		const [, setupId] = interaction.customId.split(':');
 		const setup = getSetup(interaction, setupId);
 		if (!setup) {
 			await interaction.reply({
@@ -655,15 +804,36 @@ module.exports = {
 			return true;
 		}
 
-		const emojiInput = emojiSource === 'manual'
-			? interaction.fields.getTextInputValue('emoji')
-			: setup.emojiInput;
+		if (isEmojiModal) {
+			const assigned = assignEmojiToCurrentRole(setup, interaction.fields.getTextInputValue('emoji'));
+			if (assigned.error) {
+				await interaction.reply({
+					content: assigned.error,
+					flags: MessageFlags.Ephemeral,
+				});
+				return true;
+			}
+
+			await interaction.reply({
+				embeds: [buildSetupEmbed(setup)],
+				components: buildEmojiSetupComponents(interaction, setup),
+				flags: MessageFlags.Ephemeral,
+			});
+			return true;
+		}
+
+		if (!hasAllRoleEmojis(setup)) {
+			await interaction.reply({
+				content: '모든 역할에 이모지를 먼저 배정해주세요.',
+				flags: MessageFlags.Ephemeral,
+			});
+			return true;
+		}
 
 		await createReactionRoleFromInput(interaction, {
 			title: interaction.fields.getTextInputValue('title'),
 			description: interaction.fields.getTextInputValue('description') || '',
-			emojiInput,
-			roleInputs: getSetupRoleIds(setup),
+			items: getRoleEmojiItems(setup),
 			modeInput: setup.groupName ? `${setup.mode}:${setup.groupName}` : setup.mode,
 			channelId: setup.channelId,
 		});

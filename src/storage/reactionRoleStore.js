@@ -10,26 +10,54 @@ function ensureDataDir() {
 	}
 }
 
+function normalizeReactionRoleItem(item, fallback = {}) {
+	const roleId = item.roleId ?? fallback.roleId;
+	const emoji = item.emoji ?? fallback.emoji;
+	if (!roleId || !emoji) {
+		return null;
+	}
+
+	return {
+		roleId: String(roleId),
+		emoji: String(emoji),
+		emojiId: item.emojiId ? String(item.emojiId) : (fallback.emojiId ? String(fallback.emojiId) : null),
+		emojiName: item.emojiName ? String(item.emojiName) : (fallback.emojiName ? String(fallback.emojiName) : String(emoji)),
+	};
+}
+
+function normalizeReactionRoleItems(config) {
+	if (Array.isArray(config.items) && config.items.length > 0) {
+		return config.items
+			.map(item => normalizeReactionRoleItem(item, config))
+			.filter(Boolean);
+	}
+
+	const roleIds = Array.isArray(config.roleIds) && config.roleIds.length > 0
+		? config.roleIds
+		: [config.roleId];
+
+	return [...new Set(roleIds.filter(Boolean).map(roleId => String(roleId)))]
+		.map(roleId => normalizeReactionRoleItem({ roleId }, config))
+		.filter(Boolean);
+}
+
 function normalizeReactionRole(config) {
 	const mode = config.mode || 'normal';
-	const roleIds = [...new Set(
-		(Array.isArray(config.roleIds) && config.roleIds.length > 0
-			? config.roleIds
-			: [config.roleId])
-			.filter(Boolean)
-			.map(roleId => String(roleId)),
-	)];
+	const items = normalizeReactionRoleItems(config);
+	const roleIds = [...new Set(items.map(item => item.roleId))];
 	const [roleId] = roleIds;
+	const [firstItem] = items;
 
 	return {
 		guildId: String(config.guildId),
 		channelId: String(config.channelId),
 		messageId: String(config.messageId),
-		emoji: String(config.emoji),
-		emojiId: config.emojiId ? String(config.emojiId) : null,
-		emojiName: config.emojiName ? String(config.emojiName) : null,
+		emoji: firstItem?.emoji ?? String(config.emoji),
+		emojiId: firstItem?.emojiId ?? (config.emojiId ? String(config.emojiId) : null),
+		emojiName: firstItem?.emojiName ?? (config.emojiName ? String(config.emojiName) : null),
 		roleId,
 		roleIds,
+		items,
 		title: config.title || '반응 역할',
 		description: config.description || '',
 		mode,
