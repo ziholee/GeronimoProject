@@ -54,8 +54,9 @@ module.exports = {
 					return;
 				}
 
+				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				await endVote(interaction.client, messageId, vote, channelId);
-				await interaction.reply({ content: '투표가 종료되었습니다.', flags: MessageFlags.Ephemeral });
+				await interaction.editReply({ content: '투표가 종료되었습니다.' });
 				return;
 			}
 

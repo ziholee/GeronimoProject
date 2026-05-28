@@ -1,6 +1,10 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { guildOnlyCommand } = require('../../utils/commandContext');
 
+const VOTE_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+const MAX_CHOICES = VOTE_EMOJIS.length;
+const MAX_CHOICE_LENGTH = 100;
+
 module.exports = {
 	guildOnly: true,
 	data: guildOnlyCommand(new SlashCommandBuilder()
@@ -9,29 +13,79 @@ module.exports = {
 		.addStringOption(option =>
 			option.setName('제목')
 				.setDescription('투표 제목')
+				.setMaxLength(100)
 				.setRequired(true))
 		.addStringOption(option =>
 			option.setName('선택지1')
 				.setDescription('첫 번째 선택지')
+				.setMaxLength(MAX_CHOICE_LENGTH)
 				.setRequired(true))
 		.addStringOption(option =>
 			option.setName('선택지2')
 				.setDescription('두 번째 선택지')
-				.setRequired(true))),
+				.setMaxLength(MAX_CHOICE_LENGTH)
+				.setRequired(true))
+		.addStringOption(option =>
+			option.setName('선택지3')
+				.setDescription('세 번째 선택지')
+				.setMaxLength(MAX_CHOICE_LENGTH))
+		.addStringOption(option =>
+			option.setName('선택지4')
+				.setDescription('네 번째 선택지')
+				.setMaxLength(MAX_CHOICE_LENGTH))
+		.addStringOption(option =>
+			option.setName('선택지5')
+				.setDescription('다섯 번째 선택지')
+				.setMaxLength(MAX_CHOICE_LENGTH))
+		.addStringOption(option =>
+			option.setName('선택지6')
+				.setDescription('여섯 번째 선택지')
+				.setMaxLength(MAX_CHOICE_LENGTH))
+		.addStringOption(option =>
+			option.setName('선택지7')
+				.setDescription('일곱 번째 선택지')
+				.setMaxLength(MAX_CHOICE_LENGTH))
+		.addStringOption(option =>
+			option.setName('선택지8')
+				.setDescription('여덟 번째 선택지')
+				.setMaxLength(MAX_CHOICE_LENGTH))
+		.addStringOption(option =>
+			option.setName('선택지9')
+				.setDescription('아홉 번째 선택지')
+				.setMaxLength(MAX_CHOICE_LENGTH))
+		.addStringOption(option =>
+			option.setName('선택지10')
+				.setDescription('열 번째 선택지')
+				.setMaxLength(MAX_CHOICE_LENGTH))
+		.addBooleanOption(option =>
+			option.setName('무기명')
+				.setDescription('투표자를 숨길지 선택합니다.'))
+		.addBooleanOption(option =>
+			option.setName('중복허용')
+				.setDescription('한 사람이 여러 선택지에 투표할 수 있게 합니다.'))
+		.addIntegerOption(option =>
+			option.setName('종료시간')
+				.setDescription('자동 종료까지 걸리는 시간(분), 1-1440')
+				.setMinValue(1)
+				.setMaxValue(1440))),
 	async execute(interaction) {
 		try {
 			const title = interaction.options.getString('제목');
-			const isAnonymous = false;
-			const allowMultiple = false;
-			const endTimeMinutes = null;
+			const isAnonymous = interaction.options.getBoolean('무기명') ?? false;
+			const allowMultiple = interaction.options.getBoolean('중복허용') ?? false;
+			const endTimeMinutes = interaction.options.getInteger('종료시간');
 
-			const choices = [
-				interaction.options.getString('선택지1'),
-				interaction.options.getString('선택지2'),
-			].filter(Boolean);
+			const choices = Array.from({ length: MAX_CHOICES }, (_, index) =>
+				interaction.options.getString(`선택지${index + 1}`)?.trim(),
+			).filter(Boolean);
 
 			if (choices.length < 2) {
 				await interaction.reply({ content: '최소 2개 이상의 선택지가 필요합니다.', flags: MessageFlags.Ephemeral });
+				return;
+			}
+
+			if (new Set(choices).size !== choices.length) {
+				await interaction.reply({ content: '중복된 선택지는 사용할 수 없습니다.', flags: MessageFlags.Ephemeral });
 				return;
 			}
 
@@ -152,8 +206,6 @@ async function endVote(client, messageId, vote, channelId = null) {
 			voteTitle = '투표';
 		}
 
-		const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-
 		// choices가 없으면 원본 메시지나 저장된 데이터에서 추출
 		let choices = vote.choices;
 		if (!choices || choices.length === 0) {
@@ -260,7 +312,7 @@ async function endVote(client, messageId, vote, channelId = null) {
 			}
 
 			resultEmbed.addFields({
-				name: `${emojis[result.index]} ${result.choice}`,
+				name: `${VOTE_EMOJIS[result.index]} ${result.choice}`,
 				value: value || '투표 없음',
 				inline: false,
 			});
@@ -305,7 +357,6 @@ async function endVote(client, messageId, vote, channelId = null) {
 }
 
 function createVoteEmbed(title, choices, isAnonymous, allowMultiple, endTime, creatorName) {
-	const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 	const endTimeText = endTime ? `<t:${Math.floor(endTime.getTime() / 1000)}:R> 종료` : '수동 종료';
 
 	const embed = new EmbedBuilder()
@@ -318,7 +369,7 @@ function createVoteEmbed(title, choices, isAnonymous, allowMultiple, endTime, cr
 		)
 		.addFields(
 			choices.map((choice, index) => ({
-				name: `${emojis[index]} ${choice}`,
+				name: `${VOTE_EMOJIS[index]} ${choice}`,
 				value: '0표',
 				inline: false,
 			})),
@@ -333,7 +384,7 @@ function createVoteEmbed(title, choices, isAnonymous, allowMultiple, endTime, cr
 				.setCustomId(`vote_${i + index}`)
 				.setLabel(choice.length > 80 ? choice.substring(0, 77) + '...' : choice)
 				.setStyle(ButtonStyle.Primary)
-				.setEmoji(emojis[i + index]));
+				.setEmoji(VOTE_EMOJIS[i + index]));
 		buttonRows.push(new ActionRowBuilder().addComponents(buttons));
 	}
 
@@ -374,7 +425,6 @@ function createVoteEmbed(title, choices, isAnonymous, allowMultiple, endTime, cr
 }
 
 function updateVoteEmbed(originalEmbed, vote) {
-	const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 	const endTimeText = vote.endTime ? `<t:${Math.floor(vote.endTime.getTime() / 1000)}:R> 종료` : '수동 종료';
 
 	const title = (originalEmbed?.title && typeof originalEmbed.title === 'string')
@@ -417,7 +467,7 @@ function updateVoteEmbed(originalEmbed, vote) {
 		}
 
 		return {
-			name: `${emojis[index]} ${choice}`,
+			name: `${VOTE_EMOJIS[index]} ${choice}`,
 			value,
 			inline: false,
 		};
@@ -431,7 +481,7 @@ function updateVoteEmbed(originalEmbed, vote) {
 				.setCustomId(`vote_${i + index}`)
 				.setLabel(choice.length > 80 ? choice.substring(0, 77) + '...' : choice)
 				.setStyle(ButtonStyle.Primary)
-				.setEmoji(emojis[i + index]));
+				.setEmoji(VOTE_EMOJIS[i + index]));
 		buttonRows.push(new ActionRowBuilder().addComponents(buttons));
 	}
 
